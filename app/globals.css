@@ -1,26 +1,391 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   WebDNA tokens. Warm off-white paper, near-black ink, one accent per context.
+   Colour is reserved for data; #111 is the accent, not a brand hue.
+   No webfont is loaded by design -- Inter renders for those who have it, and
+   the layout is built to survive the system-font fallback.
+   ========================================================================= */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f7f7f5;
+  --panel: #ffffff;
+  --surface: #f3f3f1;
+  --surface-hover: #ececea;
+  --ink: #111111;
+  --muted: #747474;
+  --muted-strong: #3f3f3f;
+  --border: #dededb;
+  --border-soft: #ececea;
+  --accent: #111111;
+  --accent-soft: #a8a8a3;
+  --danger: #b42318;
+  --shadow: 0 10px 32px rgba(17, 17, 17, 0.055);
+  --shadow-panel: 0 8px 28px rgba(0, 0, 0, 0.035);
+  --shadow-control: 0 4px 14px rgba(16, 17, 20, 0.05);
+  --shadow-tooltip: 0 10px 30px rgba(0, 0, 0, 0.13);
+
+  /* Status. Never colour-only -- always paired with a dot, badge and a word. */
+  --good-text: #14653a;
+  --good-strong: #14894e;
+  --good-bg: #f0faf3;
+  --good-border: #bfe6cd;
+  --warn-text: #7a5200;
+  --warn-strong: #b7791f;
+  --warn-bg: #fff8ec;
+  --warn-border: #f0dcb4;
+  --danger-text: #a62016;
+  --danger-bg: #fef2f2;
+  --danger-border: #f4c9c9;
+
+  /* Chart series, assigned in order, max 8. */
+  --series-1: #111111;
+  --series-2: #e5734f;
+  --series-3: #2f8f6b;
+  --series-4: #3f76b5;
+  --series-5: #b7791f;
+  --series-6: #8b5cf6;
+  --series-7: #d92d20;
+  --series-8: #0e8ea3;
+
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  --font-mono: ui-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 @theme inline {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-panel: var(--panel);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
 }
 
 body {
+  min-width: 320px;
   background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+  font-size: 13.5px;
+}
+
+::selection {
+  background: #ddddda;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cacac6;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+/* ---- Shell ------------------------------------------------------------- */
+
+.shell {
+  max-width: 1280px;
+  margin: 0 inline;
+  margin-inline: auto;
+  padding: 28px;
+}
+
+@media (max-width: 560px) {
+  .shell {
+    padding: 16px;
+  }
+}
+
+/* ---- Panels ------------------------------------------------------------ */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid #e5e5e5;
+  border-radius: 18px;
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+}
+
+.panel-pad {
+  padding: 20px 22px;
+}
+
+@media (max-width: 560px) {
+  .panel-pad {
+    padding: 16px;
+  }
+}
+
+/* Drop zone beside the headline readout, stacking before either gets cramped. */
+.split-grid {
+  display: grid;
+  gap: 20px;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+}
+
+.split-grid.single {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 860px) {
+  .split-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- Type -------------------------------------------------------------- */
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.panel-heading {
+  font-size: 13px;
+  font-weight: 770;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-strong);
+}
+
+h1.page-title {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  h1.page-title {
+    font-size: 25px;
+  }
+}
+
+.hero-numeral {
+  font-size: clamp(28px, 5vw, 54px);
+  font-weight: 500;
+  letter-spacing: -0.05em;
+  line-height: 1.02;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-value {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Controls ---------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 9px 15px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.18s var(--ease), border-color 0.18s var(--ease),
+    transform 0.18s var(--ease), opacity 0.18s var(--ease);
+}
+
+.btn-primary {
+  background: var(--ink);
+  color: #fff;
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: #fff;
+  border-color: #ddd;
+  color: var(--ink);
+}
+.btn-secondary:hover {
+  background: var(--surface-hover);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid #e0e0e0;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  background: #fff;
+  color: var(--muted-strong);
+}
+
+.chip-on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.input {
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: #fff;
+  padding: 9px 11px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  font-family: inherit;
+  transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.07);
+}
+
+/* ---- Status badges ----------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border: 1px solid;
+}
+
+.badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.badge-good {
+  color: var(--good-text);
+  background: var(--good-bg);
+  border-color: var(--good-border);
+}
+.badge-good .badge-dot {
+  background: var(--good-strong);
+}
+
+.badge-warn {
+  color: var(--warn-text);
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
+}
+.badge-warn .badge-dot {
+  background: var(--warn-strong);
+}
+
+.badge-danger {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+.badge-danger .badge-dot {
+  background: var(--danger);
+}
+
+.badge-neutral {
+  color: var(--muted-strong);
+  background: var(--surface);
+  border-color: var(--border);
+}
+.badge-neutral .badge-dot {
+  background: var(--accent-soft);
+}
+
+/* ---- Motion ------------------------------------------------------------ */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.5s var(--ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .rise {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }
