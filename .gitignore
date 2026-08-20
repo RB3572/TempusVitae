@@ -39,3 +39,18 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# model weights -- NEVER commit these
+# The champion trunk is ViT-L/14: 1219 MB at fp32, 611 MB at fp16. Both are past
+# GitHub's 100 MB blob limit, so the graph is hosted externally and pointed at by
+# NEXT_PUBLIC_MODEL_URL. model_meta.json is small and IS committed.
+*.onnx
+public/models/cleavage*.onnx
+
+# export scratch
+export_champ*.log
+scripts/__pycache__/
+__pycache__/
+
+# macOS AppleDouble sidecars, from the corpus drive
+._*

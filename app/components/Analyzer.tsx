@@ -57,7 +57,14 @@ export default function Analyzer() {
       try {
         const image = await prepareImage(file, meta.imageSize);
         const result = await runInference(image.tensor, meta);
-        const post = decodePosterior(result.logits, meta.rMin, meta.rMax, 0.8);
+        // The published recipe collapses the posterior with a quantile fitted on
+        // training folds, so that -- not the mean or the mode -- is the number every
+        // reported MAE describes. Demo mode has no such recipe, so it keeps the mean.
+        const q =
+          result.source === "onnx" && meta.readout === "quantile" && meta.q != null
+            ? meta.q
+            : null;
+        const post = decodePosterior(result.logits, meta.rMin, meta.rMax, 0.8, q);
         setAnalysis({
           fileName: file.name,
           image,
@@ -247,7 +254,9 @@ function Headline({
       </div>
 
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-        <span className="hero-numeral">{post.mode.toFixed(1)}</span>
+        <span className="hero-numeral">
+          {(post.readoutQ === null ? post.mode : post.readout).toFixed(1)}
+        </span>
         <span
           style={{
             fontSize: 17,
@@ -268,12 +277,17 @@ function Headline({
           marginTop: 4,
         }}
       >
-        most likely · {formatHours(post.mode)}
+        {post.readoutQ === null
+          ? `most likely · ${formatHours(post.mode)}`
+          : `model readout · fitted quantile q=${post.readoutQ} · ${formatHours(post.readout)}`}
         {capturedAt && (
           <>
             {" · "}
             <strong style={{ color: "#111", fontWeight: 700 }}>
-              {addHours(capturedAt, post.mode).toLocaleString([], {
+              {addHours(
+                capturedAt,
+                post.readoutQ === null ? post.mode : post.readout,
+              ).toLocaleString([], {
                 weekday: "short",
                 hour: "2-digit",
                 minute: "2-digit",

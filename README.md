@@ -5,9 +5,15 @@ zygote, get back **hours until first cleavage** — as a distribution, not a num
 
 ## The one thing to understand
 
-The model's only raw output is `r_logits`, a vector over 48 ordered time bins spanning
-0–18 h. Every figure on the page — mean, mode, median, interval, entropy — is a summary
-of exactly those 48 numbers, and all of them are shown, unaggregated and exportable.
+The model's only raw output is a vector over 48 ordered time bins spanning 0-18 h. Every
+figure on the page - the headline reading, mean, mode, median, interval, entropy - is a
+summary of exactly those 48 numbers, and all of them are shown, unaggregated and
+exportable.
+
+**The headline number is a fitted quantile, not the mean or the mode.** The published
+recipe collapses the posterior at `q = 0.48`, chosen on training folds, and that is the
+figure every reported MAE describes. Showing the mode instead would put a number on the
+page that no published score evaluates.
 
 That matters because the posterior is often **legitimately two-peaked**. A frame with no
 visible pronuclei is either very early or just past breakdown, and no single image can
@@ -25,21 +31,47 @@ There is no backend. The model is exported to ONNX and executed client-side by
 - PyTorch could not fit in a serverless function anyway, and a GPU endpoint would mean
   paid always-on infrastructure for a tool used a few times a day.
 
-**No weights are committed yet**, so the site runs in clearly-labelled demo mode with a
-synthetic posterior. See [`public/models/README.md`](public/models/README.md); nothing in
-the app changes when the real files arrive.
+**The weights are not in this repo and cannot be.** The trunk is DINOv2 ViT-L/14 -
+303 M parameters, 611 MB at fp16 - six times the site's old budget and past GitHub's
+100 MB blob limit. So the graph is hosted externally, pointed at by
+`NEXT_PUBLIC_MODEL_URL`, streamed with a progress readout and cached in the Cache API so
+it downloads once. Without that variable the site runs in clearly-labelled demo mode with
+a synthetic posterior. See [`public/models/README.md`](public/models/README.md).
+
+## The model on the page
+
+| | |
+|---|---|
+| Trunk | frozen DINOv2 ViT-L/14, temporally self-supervised on our own movies |
+| Views | TTA-8 - four rotations x mirror, features averaged, **inside the graph** |
+| Head | 3-seed ensemble, averaged as posteriors |
+| Readout | fitted quantile, q = 0.48 |
+| Cross-validated | **1.484 h** per-embryo MAE, 17-fold leave-one-session-out |
+| Sealed vault | **1.360 h** - three sessions no decision ever touched |
+| External cohort | **1.269 h** on 100 NYU embryos, another lab, unadapted |
+
+Hours are in the **measured** frame-interval unit. The corpus was acquired on two rigs
+running at 5.18 and 5.000 min/frame; an earlier assumed 5 min was wrong for 22 of 26
+sessions, so any figure predating that correction is in a different unit and cannot be
+converted to this one.
 
 ## Exporting the model
 
 ```bash
-python scripts/export_onnx.py \
-    --ckpt  I:/Research/EmbryoVideoData/runs/<run>/best.pt \
-    --code  I:/Training/code \
-    --out   public/models
+python scripts/export_champion.py \
+    --bundle   ../cache/final_model.pt \
+    --training ../training \
+    --weights  ../cache/ssl_vitl/backbone.pt \
+    --out      public/models
 ```
 
-Writes `cleavage.onnx` and `model_meta.json`, and checks the exported graph against
-PyTorch on a fixed input. Do not ship an export whose parity check it flags.
+Writes the graph and `model_meta.json`, reads the published scores from the training
+repo's `analysis/` rather than having them typed in, and checks the export against
+PyTorch on a fixed input - reporting both per-bin divergence and the difference in
+decoded hours. Do not ship an export whose parity check it flags.
+
+`scripts/export_onnx.py` is the OLD exporter, for a `train.py` checkpoint - a different
+architecture from the adopted recipe. Kept for reference only.
 
 ## Preprocessing parity
 

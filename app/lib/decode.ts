@@ -28,6 +28,16 @@ export interface Posterior {
   peak: number;
   /** 50th percentile of the posterior, hours. */
   median: number;
+  /**
+   * THE NUMBER THE PUBLISHED MODEL REPORTS. The adopted recipe collapses the
+   * posterior with a quantile fitted on training folds (q = 0.48), not with the
+   * mean or the mode -- so this is the figure every reported MAE describes. When
+   * no q is supplied it falls back to the mean, which is what the pre-2026-08
+   * recipe used.
+   */
+  readout: number;
+  /** The quantile used, or null when the readout is the mean. */
+  readoutQ: number | null;
   /** Shannon entropy in nats -- how spread out the answer is. */
   entropy: number;
   /** Entropy as a fraction of the maximum possible (log n), 0..1. */
@@ -78,6 +88,41 @@ export function binCentres(lo: number, hi: number, n: number): Float32Array {
   const w = (hi - lo) / n;
   for (let i = 0; i < n; i++) c[i] = lo + w * (i + 0.5);
   return c;
+}
+
+/**
+ * The q-quantile of a discrete posterior, interpolated on bin EDGES.
+ *
+ * A line-for-line port of `training/readout.py::quantile_from_probs`, and the
+ * interpolation target is the part that matters. `cumsum(probs)[i]` is the mass through
+ * the RIGHT EDGE of bin i, so pairing it with the bin's CENTRE shifts every quantile
+ * down by half a bin -- 0.1875 h on this 48-bin, 0-18 h grid. That is an order of
+ * magnitude larger than the gain the readout was adopted for, and it would apply to
+ * every number the page shows.
+ *
+ * Two checks pin it: a posterior that is a single point mass must return that bin's
+ * centre exactly, and a symmetric posterior must return its own mean.
+ */
+export function quantileFromProbs(
+  probs: Float32Array,
+  edges: Float32Array,
+  q: number,
+): number {
+  const n = probs.length;
+  let total = 0;
+  for (let i = 0; i < n; i++) total += probs[i];
+  let run = 0;
+  for (let i = 0; i < n; i++) {
+    const lo = run / total;
+    run += probs[i];
+    const hi = run / total;
+    if (hi >= q || i === n - 1) {
+      const span = Math.max(hi - lo, 1e-12);
+      const frac = Math.min(Math.max((q - lo) / span, 0), 1);
+      return edges[i] + frac * (edges[i + 1] - edges[i]);
+    }
+  }
+  return edges[n];
 }
 
 export function binEdges(lo: number, hi: number, n: number): Float32Array {
@@ -139,6 +184,8 @@ export function decodePosterior(
   rMin: number,
   rMax: number,
   mass = 0.8,
+  /** The adopted readout quantile. null => report the posterior mean instead. */
+  q: number | null = null,
 ): Posterior {
   const probs = softmax(logits);
   const n = probs.length;
@@ -174,13 +221,8 @@ export function decodePosterior(
     cdf[i] = Math.min(run, 1);
   }
 
-  let median = centres[n - 1];
-  for (let i = 0; i < n; i++) {
-    if (cdf[i] >= 0.5) {
-      median = centres[i];
-      break;
-    }
-  }
+  // Interpolated on edges, not snapped to a centre -- see quantileFromProbs.
+  const median = quantileFromProbs(probs, edges, 0.5);
 
   let entropy = 0;
   for (let i = 0; i < n; i++) {
@@ -194,7 +236,7 @@ export function decodePosterior(
   const strongPeaks: typeof peaks = [];
   for (const p of peaks) {
     if (p.prob < peak * 0.25) continue;
-    if (strongPeaks.some((q) => Math.abs(q.hours - p.hours) < 1.5)) continue;
+    if (strongPeaks.some((s) => Math.abs(s.hours - p.hours) < 1.5)) continue;
     strongPeaks.push(p);
   }
 
@@ -210,6 +252,8 @@ export function decodePosterior(
     mode,
     peak,
     median,
+    readout: q === null ? mean : quantileFromProbs(probs, edges, q),
+    readoutQ: q,
     entropy,
     entropyNorm: entropy / Math.log(n),
     bimodal: hi - lo > 3.2 * sd,

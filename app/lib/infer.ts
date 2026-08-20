@@ -1,13 +1,22 @@
 /**
  * Inference runs IN THE BROWSER.
  *
- * The trained model is a frozen DINOv2 ViT-S/14 backbone plus a small
- * distributional head -- far too large to run inside a Vercel serverless
- * function (PyTorch alone dwarfs the bundle limit), and a dedicated GPU endpoint
- * would mean paid always-on infrastructure for a tool used a few times a day.
- * Exporting to ONNX and running it client-side keeps the whole site static and
- * push-to-deploy, and has a real second benefit: unpublished microscopy never
- * leaves the machine it was opened on.
+ * The published model is a frozen DINOv2 ViT-L/14 trunk carrying temporal
+ * self-supervision, its features averaged over the eight square symmetries
+ * (TTA-8), read by a 3-seed ensemble of small distributional heads. All of that
+ * lives inside the exported graph, so the browser makes ONE session.run() call
+ * and cannot drift out of step with the evaluated recipe.
+ *
+ * Running it client-side keeps the site static and push-to-deploy, and means
+ * unpublished microscopy never leaves the machine it was opened on.
+ *
+ * THE MODEL IS 606 MB AND IS NOT IN THIS REPO. The trunk is 303 M parameters;
+ * at fp16 that is six times the site's budget and past GitHub's 100 MB blob
+ * limit. So the weights are hosted externally and pointed at by
+ * NEXT_PUBLIC_MODEL_URL (inlined at BUILD time -- changing it later needs a
+ * rebuild). The first visit downloads it with a progress readout; every visit
+ * after that reads it from the Cache API. Until a URL is configured the site
+ * stays in clearly-labelled demo mode.
  *
  * When no model file has been published yet the module reports DEMO status and
  * synthesises a plausible posterior, so the interface can be reviewed and
@@ -25,11 +34,28 @@ export interface ModelMeta {
   nBins: number;
   imageSize: number;
   backbone: string;
+  /** Human-readable description of the adopted pipeline. */
+  recipe?: string;
+  /** "quantile" (the adopted readout) or "mean". */
+  readout?: "quantile" | "mean";
+  /** The fitted readout quantile, when readout is "quantile". */
+  q?: number;
+  sigmaHours?: number;
+  ttaViews?: number;
+  /** True when the TTA views are baked into the graph (one run() call). */
+  viewsInGraph?: boolean;
+  /** Which label unit the hours are in. Pre-2026-08 numbers are a different one. */
+  unit?: string;
+  precision?: string;
+  bytes?: number;
   /** Which training run produced the weights. */
   run?: string;
-  /** Validation MAE and the predict-the-median baseline it must be read against. */
+  /** Cross-validated per-embryo MAE, and the predict-the-median baseline. */
   valMae?: number;
   baseline?: number;
+  /** Held-out estimates that no model selection ever touched. */
+  vaultMae?: number;
+  externalMae?: number;
   heldOutSessions?: string[];
   exportedAt?: string;
 }
@@ -40,7 +66,14 @@ export const FALLBACK_META: ModelMeta = {
   rMax: 18,
   nBins: 48,
   imageSize: 224,
-  backbone: "vit_small_patch14_dinov2.lvd142m",
+  backbone: "vit_large_patch14_dinov2.lvd142m",
+  recipe: "frozen DINOv2 ViT-L/14 + temporal SSL, TTA-8, 3-seed head",
+  readout: "quantile",
+  q: 0.48,
+  sigmaHours: 1.0,
+  ttaViews: 8,
+  viewsInGraph: true,
+  unit: "hours; measured per-embryo frame interval",
 };
 
 export type InferenceSource = "onnx" | "demo";
@@ -52,8 +85,98 @@ export interface InferenceResult {
   provider: string;
 }
 
-const MODEL_URL = "/models/cleavage.onnx";
+/**
+ * Where the weights live. `NEXT_PUBLIC_MODEL_URL` is inlined at build time, so a
+ * deploy that changes it needs a rebuild -- that is a Next.js property, not a
+ * choice made here. Falling back to the in-repo path keeps local development
+ * working for anyone who has put a (smaller) export there by hand.
+ */
+const MODEL_URL =
+  process.env.NEXT_PUBLIC_MODEL_URL || "/models/cleavage.onnx";
 const META_URL = "/models/model_meta.json";
+const CACHE_NAME = "tempusvitae-model-v1";
+
+export interface LoadProgress {
+  /** Bytes received so far. */
+  loaded: number;
+  /** Total bytes, or 0 when the host sends no content-length. */
+  total: number;
+  /** True once the bytes came from the Cache API rather than the network. */
+  cached: boolean;
+  done: boolean;
+}
+
+type ProgressFn = (p: LoadProgress) => void;
+let progressFn: ProgressFn | null = null;
+
+/** Register a listener for first-load download progress. */
+export function onModelProgress(fn: ProgressFn | null) {
+  progressFn = fn;
+}
+
+/**
+ * Fetch the weights, preferring a previously cached copy.
+ *
+ * A 606 MB download is not something to repeat on every page view, and the Cache
+ * API is the only browser store that holds a blob that size reliably. The
+ * response is streamed so the UI can show real progress rather than a spinner
+ * that sits still for minutes.
+ */
+async function fetchModelBytes(): Promise<ArrayBuffer> {
+  const caches_ = typeof caches !== "undefined" ? caches : null;
+  if (caches_) {
+    const cache = await caches_.open(CACHE_NAME);
+    const hit = await cache.match(MODEL_URL);
+    if (hit) {
+      const buf = await hit.arrayBuffer();
+      progressFn?.({ loaded: buf.byteLength, total: buf.byteLength, cached: true, done: true });
+      return buf;
+    }
+  }
+
+  const res = await fetch(MODEL_URL);
+  if (!res.ok) throw new Error(`model fetch failed: ${res.status}`);
+  const total = Number(res.headers.get("content-length") || 0);
+
+  // Tee the stream: one branch feeds the progress readout, the other is handed to
+  // the Cache API unread so the browser stores it without us buffering twice.
+  const reader = res.body?.getReader();
+  if (!reader) {
+    const buf = await res.arrayBuffer();
+    progressFn?.({ loaded: buf.byteLength, total: buf.byteLength, cached: false, done: true });
+    return buf;
+  }
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      chunks.push(value);
+      loaded += value.byteLength;
+      progressFn?.({ loaded, total, cached: false, done: false });
+    }
+  }
+  const bytes = new Uint8Array(loaded);
+  let at = 0;
+  for (const c of chunks) {
+    bytes.set(c, at);
+    at += c.byteLength;
+  }
+  progressFn?.({ loaded, total: total || loaded, cached: false, done: true });
+
+  if (caches_) {
+    try {
+      const cache = await caches_.open(CACHE_NAME);
+      await cache.put(MODEL_URL, new Response(bytes, {
+        headers: { "content-type": "application/octet-stream" },
+      }));
+    } catch {
+      // A full or unavailable cache is not a reason to fail the prediction.
+    }
+  }
+  return bytes.buffer;
+}
 
 let metaPromise: Promise<{ meta: ModelMeta; hasModel: boolean }> | null = null;
 let sessionPromise: Promise<{
@@ -71,8 +194,20 @@ export function loadMeta(): Promise<{ meta: ModelMeta; hasModel: boolean }> {
       const raw = await res.json();
       const meta: ModelMeta = { ...FALLBACK_META, ...raw };
       // A meta file with no weights beside it is a broken deploy, not a model.
-      const head = await fetch(MODEL_URL, { method: "HEAD" });
-      return { meta, hasModel: head.ok };
+      // A cached copy counts: the weights may be huge and already local.
+      if (typeof caches !== "undefined") {
+        const cache = await caches.open(CACHE_NAME);
+        if (await cache.match(MODEL_URL)) return { meta, hasModel: true };
+      }
+      try {
+        const head = await fetch(MODEL_URL, { method: "HEAD" });
+        return { meta, hasModel: head.ok };
+      } catch {
+        // A cross-origin host that rejects HEAD is not proof of absence, but the
+        // site must not promise a model it cannot show; demo mode is the honest
+        // default and a GET would mean downloading 606 MB just to ask.
+        return { meta, hasModel: false };
+      }
     } catch {
       return { meta: FALLBACK_META, hasModel: false };
     }
@@ -96,14 +231,17 @@ async function getSession() {
       typeof navigator !== "undefined" && "gpu" in navigator
         ? ["webgpu", "wasm"]
         : ["wasm"];
+    // Created from BYTES, not from the URL: that is what lets the Cache API serve
+    // repeat visits and what makes the download progress observable at all.
+    const bytes = await fetchModelBytes();
     try {
-      const session = await ort.InferenceSession.create(MODEL_URL, {
+      const session = await ort.InferenceSession.create(bytes, {
         executionProviders: providers,
         graphOptimizationLevel: "all",
       });
       return { session, provider: providers[0] };
     } catch {
-      const session = await ort.InferenceSession.create(MODEL_URL, {
+      const session = await ort.InferenceSession.create(bytes, {
         executionProviders: ["wasm"],
         graphOptimizationLevel: "all",
       });
