@@ -10,9 +10,12 @@
  * Running it client-side keeps the site static and push-to-deploy, and means
  * unpublished microscopy never leaves the machine it was opened on.
  *
- * THE MODEL IS 606 MB AND IS NOT IN THIS REPO. The trunk is 303 M parameters;
- * at fp16 that is six times the site's budget and past GitHub's 100 MB blob
- * limit. So the weights are hosted externally and pointed at by
+ * THE MODEL IS 1.2 GB AND IS NOT IN THIS REPO. The trunk is 303 M parameters.
+ * fp16 conversion was attempted and abandoned -- onnxconverter-common ran for
+ * 3.6 h and then 2.4 h of CPU on this graph without finishing, and int8 dynamic
+ * quantisation moved the decoded answer by 0.35 h (35x the parity bar) while
+ * producing a LARGER file. So it ships at fp32, and the weights are hosted
+ * externally and pointed at by
  * NEXT_PUBLIC_MODEL_URL (inlined at BUILD time -- changing it later needs a
  * rebuild). The first visit downloads it with a progress readout; every visit
  * after that reads it from the Cache API. Until a URL is configured the site
@@ -117,7 +120,7 @@ export function onModelProgress(fn: ProgressFn | null) {
 /**
  * Fetch the weights, preferring a previously cached copy.
  *
- * A 606 MB download is not something to repeat on every page view, and the Cache
+ * A 1.2 GB download is not something to repeat on every page view, and the Cache
  * API is the only browser store that holds a blob that size reliably. The
  * response is streamed so the UI can show real progress rather than a spinner
  * that sits still for minutes.

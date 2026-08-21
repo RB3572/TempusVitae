@@ -32,8 +32,9 @@ There is no backend. The model is exported to ONNX and executed client-side by
   paid always-on infrastructure for a tool used a few times a day.
 
 **The weights are not in this repo and cannot be.** The trunk is DINOv2 ViT-L/14 -
-303 M parameters, 611 MB at fp16 - six times the site's old budget and past GitHub's
-100 MB blob limit. So the graph is hosted externally, pointed at by
+303 M parameters, 1219 MB - twelve times the site's old budget and past GitHub's
+100 MB blob limit. It ships at fp32 because neither fp16 nor int8 survived (fp16
+conversion never finished on a graph this size; int8 moved the answer by 0.35 h). So the graph is hosted externally, pointed at by
 `NEXT_PUBLIC_MODEL_URL`, streamed with a progress readout and cached in the Cache API so
 it downloads once. Without that variable the site runs in clearly-labelled demo mode with
 a synthetic posterior. See [`public/models/README.md`](public/models/README.md).
