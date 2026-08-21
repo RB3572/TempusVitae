@@ -10,12 +10,12 @@
  * Running it client-side keeps the site static and push-to-deploy, and means
  * unpublished microscopy never leaves the machine it was opened on.
  *
- * THE MODEL IS 1.2 GB AND IS NOT IN THIS REPO. The trunk is 303 M parameters.
- * fp16 conversion was attempted and abandoned -- onnxconverter-common ran for
- * 3.6 h and then 2.4 h of CPU on this graph without finishing, and int8 dynamic
- * quantisation moved the decoded answer by 0.35 h (35x the parity bar) while
- * producing a LARGER file. So it ships at fp32, and the weights are hosted
- * externally and pointed at by
+ * THE MODEL IS 610 MB AND IS NOT IN THIS REPO. The trunk is 303 M parameters.
+ * The graph is halved from 1219 MB by storing weights as fp16 while keeping every
+ * computation in fp32 -- full fp16 drifts the decoded answer 0.376 h and int8
+ * drifts 0.35 h while producing a larger file, so neither ships. 610 MB is still
+ * six times GitHub's blob limit, so the weights are hosted externally and pointed
+ * at by
  * NEXT_PUBLIC_MODEL_URL (inlined at BUILD time -- changing it later needs a
  * rebuild). The first visit downloads it with a progress readout; every visit
  * after that reads it from the Cache API. Until a URL is configured the site
@@ -91,7 +91,7 @@ export interface InferenceResult {
 /**
  * Where the weights live. **This must be configured; there is no working default.**
  *
- * The graph is 1.2 GB, which rules out every in-repo option: GitHub rejects blobs
+ * The graph is 610 MB, which still rules out every in-repo option: GitHub rejects blobs
  * over 100 MB, and free Git LFS gives 1 GB of storage and 1 GB of monthly
  * bandwidth, which one visitor would exhaust.
  *
@@ -138,7 +138,7 @@ export function onModelProgress(fn: ProgressFn | null) {
 /**
  * Fetch the weights, preferring a previously cached copy.
  *
- * A 1.2 GB download is not something to repeat on every page view, and the Cache
+ * A 610 MB download is not something to repeat on every page view, and the Cache
  * API is the only browser store that holds a blob that size reliably. The
  * response is streamed so the UI can show real progress rather than a spinner
  * that sits still for minutes.
@@ -223,7 +223,7 @@ export function loadMeta(): Promise<{ meta: ModelMeta; hasModel: boolean }> {
       // Probe cheaply. HEAD first; some hosts (and some CDN redirects) refuse it,
       // so fall back to a one-byte ranged GET, which costs nothing and exercises
       // the same CORS path the real download will take. A plain GET is not an
-      // option -- it would pull 1.2 GB just to answer "does this exist".
+      // option -- it would pull 610 MB just to answer "does this exist".
       for (const init of [
         { method: "HEAD" } as RequestInit,
         { method: "GET", headers: { Range: "bytes=0-0" } } as RequestInit,

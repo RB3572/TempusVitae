@@ -12,13 +12,16 @@
   "viewsInGraph": true,
   "outputIs": "log(mean posterior) -- softmax recovers the posterior exactly",
   "unit": "hours; REBASED (measured per-embryo frame interval, plan 13.2-RELABEL)",
-  "precision": "fp32",
-  "bytes": 1218882066,
-  "exportedAt": "2026-08-21T01:38:53Z",
+  "precision": "fp16 weights, fp32 activations",
+  "bytes": 610438713,
+  "exportedAt": "2026-08-21T08:36:46Z",
   "valMae": 1.4844640493392944,
   "valProtocol": "17-fold LOSO",
   "vaultMae": 1.3595296144485474,
   "externalMae": 1.2692223771236326,
   "externalRhoWithin": 0.70903117745223,
-  "baseline": 2.715780056560385
+  "baseline": 2.715780056560385,
+  "shrunkBy": "initializers-only",
+  "parityMaxBinDelta": 0.000119,
+  "parityHoursDelta": 0.0035
 }

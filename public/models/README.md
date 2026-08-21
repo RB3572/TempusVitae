@@ -7,20 +7,36 @@ The site looks for two things at page load:
 | `model_meta.json` | Bin grid, the adopted readout, and the scores. **Committed.** |
 | the ONNX graph | Input `[1,1,224,224]`, greyscale in `[0,1]`. **Not committed — see below.** |
 
-## The graph is 1.2 GB and cannot live in this repo
+## The graph is 610 MB and still cannot live in this repo
 
 The published model is a frozen **DINOv2 ViT-L/14** trunk (303 M parameters) carrying
-temporal self-supervision. The exported graph is 1219 MB at fp32 -- twelve times this
+temporal self-supervision. The exported graph is 610 MB -- six times this
 site's old ~95 MB budget and well past GitHub's 100 MB blob limit. There is no version of
 "commit it anyway" that works.
 
-**It ships at fp32 because nothing smaller survived a parity check.** fp16 conversion via
-`onnxconverter-common` was attempted twice and abandoned: 3.6 h of CPU on the first
-attempt and 2.4 h on the second, neither finishing, on a graph this size. int8 dynamic
-quantisation ran in 0.4 min but moved the decoded prediction by **0.35 h** -- 35x the
-0.01 h parity bar -- and produced a *larger* file (1517 MB) because of the dequantisation
-nodes it inserts. Halving the download is worth having; changing the answer to get it is
-not. This is a real open optimisation, not a solved one.
+**It ships at 610 MB, halved, with the answer unchanged to 0.0035 h.** Getting there
+took three attempts and the failures localise the problem precisely:
+
+| attempt | result |
+|---|---|
+| `onnxconverter_common` fp16, twice | 3.6 h and 2.4 h of CPU, neither finished. It walks all 11,142 nodes doing type propagation. |
+| int8 dynamic quantisation | 0.4 min, but moved the decoded prediction **0.35 h** and produced a *larger* file (1517 MB) from the dequantisation nodes it inserts. |
+| fuse (11,142 -> 8,316 nodes) then fp16 | fp16 conversion dropped to **6 seconds** -- confirming node count was the bottleneck all along -- but drifted **0.376 h**. Rejected. |
+| **fp16 weights, fp32 activations** | **610 MB, drift 0.0035 h. Adopted.** |
+
+The last two together isolate the cause. Same weight rounding in both; the only
+difference is whether activations are fp16. Full fp16 drifts 0.376 h, weights-only
+drifts 0.0035 h -- a hundredfold difference. **fp16 weights are fine for this model;
+fp16 activations are not.** Storing weights as fp16 with a `Cast` back to fp32 at use
+keeps every computation in fp32, so there is no mixed-precision graph to get wrong, and
+the file still halves because the file is 99.8% weights.
+
+Verified on real corpus frames, not just random input: the 610 MB graph scores 0.153 h
+mean error on six embryos where the fp32 graph scored 0.152 h.
+
+One consequence worth knowing: onnxruntime folds those Cast nodes at session
+initialisation, so the weights are materialised back to fp32 in memory. The DOWNLOAD
+halves; the runtime memory does not.
 
 ## Where to host it, and what does not work
 
@@ -41,7 +57,7 @@ working deploy right up until someone drops an image in.
 # 1. bucket
 npx wrangler r2 bucket create tempusvitae-models
 
-# 2. upload (1.2 GB)
+# 2. upload (610 MB)
 npx wrangler r2 object put tempusvitae-models/cleavage.onnx     --file public/models/cleavage.onnx     --content-type application/octet-stream
 ```
 

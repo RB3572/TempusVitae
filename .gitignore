@@ -49,6 +49,7 @@ public/models/cleavage*.onnx
 
 # export scratch
 export_champ*.log
+shrink.log
 scripts/__pycache__/
 __pycache__/
 
