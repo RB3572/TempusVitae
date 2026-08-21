@@ -282,6 +282,23 @@ async function getSession() {
   return sessionPromise;
 }
 
+/**
+ * WebGPU can accept a graph at session creation and still reject an operator on
+ * the first run. In that case release its (large) GPU allocation before reading
+ * the already-cached graph back and rebuilding with the portable WASM backend.
+ */
+async function replaceWithWasmSession() {
+  const ort = await import("onnxruntime-web");
+  const bytes = await fetchModelBytes();
+  const session = await ort.InferenceSession.create(bytes, {
+    executionProviders: ["wasm"],
+    graphOptimizationLevel: "all",
+  });
+  const loaded = { session, provider: "wasm" };
+  sessionPromise = Promise.resolve(loaded);
+  return loaded;
+}
+
 /** Cheap deterministic hash, so one image always yields the same demo posterior. */
 function hashTensor(t: Float32Array): number {
   let h = 2166136261;
@@ -361,14 +378,25 @@ export async function runInference(
   const size = meta.imageSize;
   const input = new ort.Tensor("float32", tensor, [1, 1, size, size]);
   const inputName = loaded.session.inputNames[0];
-  const output = await loaded.session.run({ [inputName]: input });
-  const outName = loaded.session.outputNames[0];
+  let active = loaded;
+  let output;
+  try {
+    output = await active.session.run({ [inputName]: input });
+  } catch (error) {
+    if (active.provider !== "webgpu") throw error;
+    await active.session.release();
+    active = await replaceWithWasmSession();
+    output = await active.session.run({
+      [active.session.inputNames[0]]: input,
+    });
+  }
+  const outName = active.session.outputNames[0];
   const raw = output[outName] as TypedTensor<"float32">;
 
   return {
     logits: Float32Array.from(raw.data as Float32Array),
     source: "onnx",
     ms: performance.now() - started,
-    provider: loaded.provider,
+    provider: active.provider,
   };
 }
