@@ -170,10 +170,12 @@ export default function CorpusStrip({ post }: { post: Posterior }) {
               {picks.map((e) => (
                 <figure key={e.src} style={{ margin: 0 }}>
                   {/* Plain <img>: these are pre-sized WebP files served from /public, so
-                      next/image's resizing pipeline would add a round trip and buy
-                      nothing. Not lazy -- there are at most fifteen of them at ~3 KB
-                      each, and lazy loading them leaves holes when the panel is already
-                      in view at the moment a result appears. */}
+                      next/image's resizing pipeline would add a round trip and a billed
+                      optimisation for no gain -- the source is already 176px WebP at
+                      ~3 KB and is displayed at its native size. Not lazy either: there
+                      are at most fifteen, and lazy loading leaves holes because the
+                      panel is already in view the moment a result appears. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={`/corpus/img/${e.src}`}
                     alt={`A mouse zygote ${formatHours(e.t)} before its first cleavage`}
