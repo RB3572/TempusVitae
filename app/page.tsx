@@ -1,4 +1,5 @@
 import Analyzer from "./components/Analyzer";
+import EmbryoMark from "./components/EmbryoMark";
 
 export default function Home() {
   return (
@@ -14,8 +15,16 @@ export default function Home() {
         }}
       >
         <div>
-          <div className="eyebrow" style={{ marginBottom: 6 }}>
-            Tempus Vitae
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 9,
+              marginBottom: 6,
+            }}
+          >
+            <EmbryoMark size={26} />
+            <span className="eyebrow">Tempus Vitae</span>
           </div>
           <h1 className="page-title">Zygote cleavage-time model</h1>
           <p

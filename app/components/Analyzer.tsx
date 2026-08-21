@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Clock, RotateCcw, TriangleAlert } from "lucide-react";
 import CdfChart from "./CdfChart";
+import CorpusStrip from "./CorpusStrip";
 import DropZone from "./DropZone";
 import InputPreview from "./InputPreview";
 import MetricsGrid from "./MetricsGrid";
@@ -186,6 +187,13 @@ export default function Analyzer() {
             </Panel>
           </div>
 
+          <Panel
+            title="What our corpus looks like at this time"
+            caption="Real embryos that were this far from dividing — so the number has something to be checked against."
+          >
+            <CorpusStrip post={analysis.post} />
+          </Panel>
+
           <div
             style={{
               display: "grid",
@@ -196,12 +204,34 @@ export default function Analyzer() {
             <Panel title="Model input" caption="What the network actually saw.">
               <InputPreview image={analysis.image} />
             </Panel>
-            <Panel title="Raw output" caption="Every logit and probability, exportable.">
+            <Panel
+              title="Raw output"
+              caption="Every logit and probability, exportable — and the whole of what the model emits."
+            >
               <RawData
                 post={analysis.post}
                 logits={analysis.logits}
                 fileName={analysis.fileName}
               />
+              {/* Said plainly because it is the obvious next question, and because a
+                  saliency overlay would be easy to fake and wrong to show: learned
+                  routing over this model's patch tokens was measured and LOST to the
+                  pooled feature by 0.26 h, so there is no evidence its spatial tokens
+                  localise anything about timing. */}
+              <p
+                style={{
+                  margin: "12px 0 0",
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  color: "var(--accent-soft)",
+                  lineHeight: 1.6,
+                }}
+              >
+                These 48 numbers are the model&rsquo;s entire output. It does not
+                segment the embryo, mark pronuclei, or localise anything — the backbone
+                pools its features across the whole frame before the head sees them, so
+                no spatial information survives to the prediction.
+              </p>
             </Panel>
           </div>
 

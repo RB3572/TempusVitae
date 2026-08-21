@@ -1,0 +1,684 @@
+{
+ "unit": "hours until first cleavage; REBASED (measured per-embryo frame interval)",
+ "tile": 176,
+ "n": 135,
+ "sessions": 17,
+ "note": "One frame per embryo, drawn from the 17 training sessions. Sealed test sessions are excluded. Times come from cache/rows.npz, not from the stale labels.csv on disk.",
+ "entries": [
+  {
+   "t": 0.515,
+   "src": "UntitledDVD_2aprCMa_crop9_74.webp",
+   "session": "untitled dvd"
+  },
+  {
+   "t": 0.518,
+   "src": "6sepNCp_6sepNCpm120_crop9_16.webp",
+   "session": "6sepncp"
+  },
+  {
+   "t": 0.518,
+   "src": "19aprCBm_19aprCB1m_crop7_69.webp",
+   "session": "19aprcb"
+  },
+  {
+   "t": 0.518,
+   "src": "28jun4augNCl_5augNCL_crop30_27.webp",
+   "session": "28jun4augncl"
+  },
+  {
+   "t": 0.518,
+   "src": "11NovNCe_11NovNCe120_crop8_33.webp",
+   "session": "11novnce"
+  },
+  {
+   "t": 0.977,
+   "src": "16junH2B_16junH2BzygoteBF5_crop5_52.webp",
+   "session": "16junh2b"
+  },
+  {
+   "t": 1.031,
+   "src": "UntitledDVD_2aprCMa_crop8_69.webp",
+   "session": "untitled dvd"
+  },
+  {
+   "t": 1.036,
+   "src": "6sepNCp_6sepNCpm120_crop6_9.webp",
+   "session": "6sepncp"
+  },
+  {
+   "t": 1.036,
+   "src": "19aprCBm_19aprCB1m_crop5_74.webp",
+   "session": "19aprcb"
+  },
+  {
+   "t": 1.036,
+   "src": "18NovNCe_18NovNCe120_crop3_2.webp",
+   "session": "18novnce"
+  },
+  {
+   "t": 1.469,
+   "src": "27OctNCafC_27octNCafCm_crop9_36.webp",
+   "session": "27octncafc"
+  },
+  {
+   "t": 1.469,
+   "src": "12OctNCafC_12octNCafCeALL_crop9_49.webp",
+   "session": "12octncafc"
+  },
+  {
+   "t": 1.482,
+   "src": "20julpartoil_20julparticle40_crop1_18.webp",
+   "session": "20julpartoil"
+  },
+  {
+   "t": 1.509,
+   "src": "16junH2B_16junHzygoteBF3mov_crop2_46.webp",
+   "session": "16junh2b"
+  },
+  {
+   "t": 1.527,
+   "src": "4NovNCe_4NovNCe3.mov_crop10_72.webp",
+   "session": "4novnce"
+  },
+  {
+   "t": 1.987,
+   "src": "28jun4augNCl_28junNClate_crop10_30.webp",
+   "session": "28jun4augncl"
+  },
+  {
+   "t": 1.987,
+   "src": "11NovNCe_11NovNCe120_crop6_15.webp",
+   "session": "11novnce"
+  },
+  {
+   "t": 1.988,
+   "src": "27OctNCafC_27octNCafCm_crop5_52.webp",
+   "session": "27octncafc"
+  },
+  {
+   "t": 1.988,
+   "src": "12OctNCafC_12octNCafCeALL_crop4_34.webp",
+   "session": "12octncafc"
+  },
+  {
+   "t": 2.002,
+   "src": "20julpartoil_20julparticle80_crop4_3.webp",
+   "session": "20julpartoil"
+  },
+  {
+   "t": 2.504,
+   "src": "2DecNCe_2DecNCe6.mov_crop12_81.webp",
+   "session": "2decnce"
+  },
+  {
+   "t": 2.504,
+   "src": "19aprCBm_19aprCB1m_crop12_34.webp",
+   "session": "19aprcb"
+  },
+  {
+   "t": 2.504,
+   "src": "6sepNCp_6sepNCpm80_crop3_3.webp",
+   "session": "6sepncp"
+  },
+  {
+   "t": 2.505,
+   "src": "18NovNCe_18NovNCe80_crop5_10.webp",
+   "session": "18novnce"
+  },
+  {
+   "t": 2.505,
+   "src": "28jun4augNCl_5augNCL_crop20_35.webp",
+   "session": "28jun4augncl"
+  },
+  {
+   "t": 3.006,
+   "src": "UntitledDVD_2aprCMa_crop4_50.webp",
+   "session": "untitled dvd"
+  },
+  {
+   "t": 3.019,
+   "src": "16junH2B_16junHzygoteBF1mov_crop6_49.webp",
+   "session": "16junh2b"
+  },
+  {
+   "t": 3.022,
+   "src": "2DecNCe_2DecNCe1.mov_crop5_82.webp",
+   "session": "2decnce"
+  },
+  {
+   "t": 3.023,
+   "src": "19aprCBm_19aprCB1m_crop1_26.webp",
+   "session": "19aprcb"
+  },
+  {
+   "t": 3.023,
+   "src": "18NovNCe_18NovNCe80_crop7_0.webp",
+   "session": "18novnce"
+  },
+  {
+   "t": 3.463,
+   "src": "16junH2B_16junH2BzygoteBF5_crop4_18.webp",
+   "session": "16junh2b"
+  },
+  {
+   "t": 3.503,
+   "src": "4NovNCe_4NovNCe2.mov_crop3_89.webp",
+   "session": "4novnce"
+  },
+  {
+   "t": 3.522,
+   "src": "UntitledDVD_2aprCMa_crop7_50.webp",
+   "session": "untitled dvd"
+  },
+  {
+   "t": 3.54,
+   "src": "24NovNCafC_24NovNCafCM1_crop4_15.webp",
+   "session": "24novncafc"
+  },
+  {
+   "t": 3.54,
+   "src": "2DecNCe_2DecNCe7.mov_crop9_44.webp",
+   "session": "2decnce"
+  },
+  {
+   "t": 3.975,
+   "src": "28jun4augNCl_28junNClate_crop6_7.webp",
+   "session": "28jun4augncl"
+  },
+  {
+   "t": 3.976,
+   "src": "27OctNCafC_27octNCafCm_crop8_41.webp",
+   "session": "27octncafc"
+  },
+  {
+   "t": 3.976,
+   "src": "12OctNCafC_12octNCafCeALL_crop1_2.webp",
+   "session": "12octncafc"
+  },
+  {
+   "t": 3.996,
+   "src": "16junH2B_16junH2BzygoteBF5_crop6_38.webp",
+   "session": "16junh2b"
+  },
+  {
+   "t": 4.0,
+   "src": "18nov25marHIS_18NovBF3.avi_crop13_2.webp",
+   "session": "18nov25marhis"
+  },
+  {
+   "t": 4.491,
+   "src": "18NovNCe_18NovNCe2.mov_crop8_34.webp",
+   "session": "18novnce"
+  },
+  {
+   "t": 4.493,
+   "src": "28jun4augNCl_28junNClate_crop15_12.webp",
+   "session": "28jun4augncl"
+  },
+  {
+   "t": 4.494,
+   "src": "27OctNCafC_27octNCafCm_crop10_11.webp",
+   "session": "27octncafc"
+  },
+  {
+   "t": 4.494,
+   "src": "12OctNCafC_12octNCafCeALL_crop11_13.webp",
+   "session": "12octncafc"
+  },
+  {
+   "t": 4.5,
+   "src": "18nov25marHIS_18NovBF1.avi_crop6_57.webp",
+   "session": "18nov25marhis"
+  },
+  {
+   "t": 5.0,
+   "src": "18nov25marHIS_18NovBF5.avi_crop16_4.webp",
+   "session": "18nov25marhis"
+  },
+  {
+   "t": 5.008,
+   "src": "24NovNCafC_24NovNCafC5.mov_crop1_13.webp",
+   "session": "24novncafc"
+  },
+  {
+   "t": 5.008,
+   "src": "2DecNCe_2DecNCe1.mov_crop10_49.webp",
+   "session": "2decnce"
+  },
+  {
+   "t": 5.009,
+   "src": "19aprCBm_19aprCB1m_crop3_3.webp",
+   "session": "19aprcb"
+  },
+  {
+   "t": 5.009,
+   "src": "18NovNCe_18NovNCe3.mov_crop4_63.webp",
+   "session": "18novnce"
+  },
+  {
+   "t": 5.478,
+   "src": "4NovNCe_4NovNCe4.mov_crop4_40.webp",
+   "session": "4novnce"
+  },
+  {
+   "t": 5.497,
+   "src": "UntitledDVD_30marCM_crop19_12.webp",
+   "session": "untitled dvd"
+  },
+  {
+   "t": 5.5,
+   "src": "18nov25marHIS_18NOVHZYGOTEBF4.tif_crop11_43.webp",
+   "session": "18nov25marhis"
+  },
+  {
+   "t": 5.505,
+   "src": "16junH2B_16junH2BzygoteBF2_crop4_1.webp",
+   "session": "16junh2b"
+  },
+  {
+   "t": 5.526,
+   "src": "24NovNCafC_24NovNCafC2.mov_crop2_36.webp",
+   "session": "24novncafc"
+  },
+  {
+   "t": 5.964,
+   "src": "27OctNCafC_27octNCafCm_crop3_2.webp",
+   "session": "27octncafc"
+  },
+  {
+   "t": 6.0,
+   "src": "18nov25marHIS_18NovBF3.avi_crop11_38.webp",
+   "session": "18nov25marhis"
+  },
+  {
+   "t": 6.013,
+   "src": "UntitledDVD_2aprCMa_crop11_12.webp",
+   "session": "untitled dvd"
+  },
+  {
+   "t": 6.017,
+   "src": "4NovNCe_4NovNCe6.mov_crop2_35.webp",
+   "session": "4novnce"
+  },
+  {
+   "t": 6.038,
+   "src": "16junH2B_16junH2BzygoteBF3_crop13_16.webp",
+   "session": "16junh2b"
+  },
+  {
+   "t": 6.477,
+   "src": "18NovNCe_18NovNCe7.mov_crop9_19.webp",
+   "session": "18novnce"
+  },
+  {
+   "t": 6.482,
+   "src": "27OctNCafC_27octNCafCm_crop7_11.webp",
+   "session": "27octncafc"
+  },
+  {
+   "t": 6.482,
+   "src": "16junH2B_16junH2BzygoteBF5_crop3_2.webp",
+   "session": "16junh2b"
+  },
+  {
+   "t": 6.482,
+   "src": "12OctNCafC_12octNCafCeALL_crop7_1.webp",
+   "session": "12octncafc"
+  },
+  {
+   "t": 6.5,
+   "src": "18nov25marHIS_18NovBF4.avi_crop18_32.webp",
+   "session": "18nov25marhis"
+  },
+  {
+   "t": 6.996,
+   "src": "18NovNCe_18NovNCe4.mov_crop1_13.webp",
+   "session": "18novnce"
+  },
+  {
+   "t": 6.997,
+   "src": "28jun4augNCl_5augNCL_crop27_7.webp",
+   "session": "28jun4augncl"
+  },
+  {
+   "t": 7.0,
+   "src": "18nov25marHIS_18NovHzygote.tif_crop19_26.webp",
+   "session": "18nov25marhis"
+  },
+  {
+   "t": 7.001,
+   "src": "27OctNCafC_27OctNCafC5.mov_crop9_6.webp",
+   "session": "27octncafc"
+  },
+  {
+   "t": 7.001,
+   "src": "12OctNCafC_12octNCafCeALL_crop5_2.webp",
+   "session": "12octncafc"
+  },
+  {
+   "t": 7.5,
+   "src": "18nov25marHIS_18NovBF5.avi_crop18_19.webp",
+   "session": "18nov25marhis"
+  },
+  {
+   "t": 7.51,
+   "src": "26aprNc_26aprnonC6.mov_crop7_43.webp",
+   "session": "26aprnc"
+  },
+  {
+   "t": 7.512,
+   "src": "24NovNCafC_24NovNCafC1.mov_crop4_10.webp",
+   "session": "24novncafc"
+  },
+  {
+   "t": 7.513,
+   "src": "2DecNCe_2DecNCe3.mov_crop2_9.webp",
+   "session": "2decnce"
+  },
+  {
+   "t": 7.513,
+   "src": "19aprCBm_19aprCB1m_crop11_2.webp",
+   "session": "19aprcb"
+  },
+  {
+   "t": 7.988,
+   "src": "UntitledDVD_2aprCMa_crop1_1.webp",
+   "session": "untitled dvd"
+  },
+  {
+   "t": 7.993,
+   "src": "4NovNCe_4NovNCe4.mov_crop7_4.webp",
+   "session": "4novnce"
+  },
+  {
+   "t": 8.0,
+   "src": "18nov25marHIS_18NovBF4.avi_crop16_14.webp",
+   "session": "18nov25marhis"
+  },
+  {
+   "t": 8.028,
+   "src": "26aprNc_26aprnonC3_crop8_49.webp",
+   "session": "26aprnc"
+  },
+  {
+   "t": 8.03,
+   "src": "24NovNCafC_24NovNCafC5.mov_crop4_4.webp",
+   "session": "24novncafc"
+  },
+  {
+   "t": 8.463,
+   "src": "2DecNCe_2DecNCe4.mov_crop4_6.webp",
+   "session": "2decnce"
+  },
+  {
+   "t": 8.464,
+   "src": "18NovNCe_18NovNCe4.mov_crop2_22.webp",
+   "session": "18novnce"
+  },
+  {
+   "t": 8.466,
+   "src": "14junCB_14junCB4.mov_crop2_11.webp",
+   "session": "14juncb"
+  },
+  {
+   "t": 8.5,
+   "src": "18nov25marHIS_18NovHzygote.tif_crop22_7.webp",
+   "session": "18nov25marhis"
+  },
+  {
+   "t": 8.532,
+   "src": "4NovNCe_4NovNCe3.mov_crop3_10.webp",
+   "session": "4novnce"
+  },
+  {
+   "t": 8.981,
+   "src": "4NovNCe_4NovNCe3.mov_crop1_12.webp",
+   "session": "4novnce"
+  },
+  {
+   "t": 8.981,
+   "src": "2DecNCe_2DecNCe2.mov_crop4_2.webp",
+   "session": "2decnce"
+  },
+  {
+   "t": 8.982,
+   "src": "18NovNCe_18NovNCe3.mov_crop7_17.webp",
+   "session": "18novnce"
+  },
+  {
+   "t": 8.985,
+   "src": "14junCB1_14junCB3_crop11_17.webp",
+   "session": "14juncb"
+  },
+  {
+   "t": 9.0,
+   "src": "18nov25marHIS_18NovBF2.avi_crop8_3.webp",
+   "session": "18nov25marhis"
+  },
+  {
+   "t": 9.496,
+   "src": "26aprNc_26aprnonC1_crop4_10.webp",
+   "session": "26aprnc"
+  },
+  {
+   "t": 9.498,
+   "src": "24NovNCafC_24NovNCafC3.mov_crop7_21.webp",
+   "session": "24novncafc"
+  },
+  {
+   "t": 9.499,
+   "src": "2DecNCe_2DecNCe7.mov_crop12_0.webp",
+   "session": "2decnce"
+  },
+  {
+   "t": 9.5,
+   "src": "18NovNCe_18NovNCe2.mov_crop2_10.webp",
+   "session": "18novnce"
+  },
+  {
+   "t": 9.503,
+   "src": "14junCB1_14junCB2_crop3_17.webp",
+   "session": "14juncb"
+  },
+  {
+   "t": 10.014,
+   "src": "26aprNc_26aprnonC4.mov_crop3_19.webp",
+   "session": "26aprnc"
+  },
+  {
+   "t": 10.016,
+   "src": "24NovNCafC_24NovNCafC6.mov_crop12_14.webp",
+   "session": "24novncafc"
+  },
+  {
+   "t": 10.017,
+   "src": "2DecNCe_2DecNCe7.mov_crop11_1.webp",
+   "session": "2decnce"
+  },
+  {
+   "t": 10.019,
+   "src": "18NovNCe_18NovNCe6.mov_crop2_3.webp",
+   "session": "18novnce"
+  },
+  {
+   "t": 10.021,
+   "src": "14junCB1_14junCB2_crop9_4.webp",
+   "session": "14juncb"
+  },
+  {
+   "t": 10.508,
+   "src": "4NovNCe_4NovNCe7.mov_crop5_1.webp",
+   "session": "4novnce"
+  },
+  {
+   "t": 10.532,
+   "src": "26aprNc_26aprnonC7.mov_crop6_39.webp",
+   "session": "26aprnc"
+  },
+  {
+   "t": 10.534,
+   "src": "24NovNCafC_24NovNCafC5.mov_crop10_9.webp",
+   "session": "24novncafc"
+  },
+  {
+   "t": 10.535,
+   "src": "2DecNCe_2DecNCe5.mov_crop6_5.webp",
+   "session": "2decnce"
+  },
+  {
+   "t": 10.539,
+   "src": "14junCB1_14junCB2_crop10_34.webp",
+   "session": "14juncb"
+  },
+  {
+   "t": 10.964,
+   "src": "26aprNc_26aprnonC1_crop8_14.webp",
+   "session": "26aprnc"
+  },
+  {
+   "t": 10.966,
+   "src": "24NovNCafC_24NovNCafC1.mov_crop6_4.webp",
+   "session": "24novncafc"
+  },
+  {
+   "t": 10.967,
+   "src": "2DecNCe_2DecNCe5.mov_crop3_1.webp",
+   "session": "2decnce"
+  },
+  {
+   "t": 10.972,
+   "src": "14junCB_14junCB5.mov_crop1_54.webp",
+   "session": "14juncb"
+  },
+  {
+   "t": 11.0,
+   "src": "dynamNOcyt_6augNCE20040806_092503.tif_crop2_44.webp",
+   "session": "dynamnocyt"
+  },
+  {
+   "t": 11.311,
+   "src": "24NovNCafC_24NovNCafC2.mov_crop6_0.webp",
+   "session": "24novncafc"
+  },
+  {
+   "t": 11.311,
+   "src": "24NovNCafC_24NovNCafC7.mov_crop5_0.webp",
+   "session": "24novncafc"
+  },
+  {
+   "t": 11.482,
+   "src": "26aprNc_26aprnonC1_crop3_1.webp",
+   "session": "26aprnc"
+  },
+  {
+   "t": 11.49,
+   "src": "14junCB1_14junCB1_crop12_31.webp",
+   "session": "14juncb"
+  },
+  {
+   "t": 11.496,
+   "src": "4NovNCe_4NovNCe3.mov_crop2_0.webp",
+   "session": "4novnce"
+  },
+  {
+   "t": 11.5,
+   "src": "dynamNOcyt_6augNCE20040806_092503.tif_crop3_47.webp",
+   "session": "dynamnocyt"
+  },
+  {
+   "t": 11.585,
+   "src": "4NovNCe_4NovNCe4.mov_crop3_0.webp",
+   "session": "4novnce"
+  },
+  {
+   "t": 11.585,
+   "src": "4NovNCe_4NovNCe1.mov_crop9_0.webp",
+   "session": "4novnce"
+  },
+  {
+   "t": 12.0,
+   "src": "26aprNc_26aprnonC1_crop6_22.webp",
+   "session": "26aprnc"
+  },
+  {
+   "t": 12.0,
+   "src": "dynamNOcyt_28junD120040728_165504.tif_crop7_36.webp",
+   "session": "dynamnocyt"
+  },
+  {
+   "t": 12.008,
+   "src": "14junCB1_14junCB2_crop12_25.webp",
+   "session": "14juncb"
+  },
+  {
+   "t": 12.5,
+   "src": "dynamNOcyt_28junD120040728_165504.tif_crop2_39.webp",
+   "session": "dynamnocyt"
+  },
+  {
+   "t": 12.5,
+   "src": "dynamNOcyt_6augNCE20040806_092503.tif_crop11_29.webp",
+   "session": "dynamnocyt"
+  },
+  {
+   "t": 12.517,
+   "src": "26aprNc_26aprnonC1.mov_crop6_16.webp",
+   "session": "26aprnc"
+  },
+  {
+   "t": 12.526,
+   "src": "14junCB1_14junCB2_crop1_36.webp",
+   "session": "14juncb"
+  },
+  {
+   "t": 12.959,
+   "src": "14junCB1_14junCB3_crop1_32.webp",
+   "session": "14juncb"
+  },
+  {
+   "t": 13.001,
+   "src": "dynamNOcyt_6augNCE20040806_092503.tif_crop1_6.webp",
+   "session": "dynamnocyt"
+  },
+  {
+   "t": 13.001,
+   "src": "dynamNOcyt_6augNCE20040806_092503.tif_crop4_13.webp",
+   "session": "dynamnocyt"
+  },
+  {
+   "t": 13.001,
+   "src": "dynamNOcyt_28junD120040728_165504.tif_crop10_24.webp",
+   "session": "dynamnocyt"
+  },
+  {
+   "t": 13.035,
+   "src": "26aprNc_26aprnonC3.mov_crop7_10.webp",
+   "session": "26aprnc"
+  },
+  {
+   "t": 13.985,
+   "src": "26aprNc_26aprnonC4_crop7_0.webp",
+   "session": "26aprnc"
+  },
+  {
+   "t": 13.995,
+   "src": "14junCB_14junCB7.mov_crop10_2.webp",
+   "session": "14juncb"
+  },
+  {
+   "t": 14.001,
+   "src": "dynamNOcyt_6augNCE20040806_092503.tif_crop10_3.webp",
+   "session": "dynamnocyt"
+  },
+  {
+   "t": 14.001,
+   "src": "dynamNOcyt_28junD120040728_165504.tif_crop1_28.webp",
+   "session": "dynamnocyt"
+  },
+  {
+   "t": 14.001,
+   "src": "dynamNOcyt_6augNCE20040806_092503.tif_crop5_0.webp",
+   "session": "dynamnocyt"
+  }
+ ]
+}
