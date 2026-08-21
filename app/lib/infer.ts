@@ -89,10 +89,28 @@ export interface InferenceResult {
 }
 
 /**
- * Where the weights live. `NEXT_PUBLIC_MODEL_URL` is inlined at build time, so a
- * deploy that changes it needs a rebuild -- that is a Next.js property, not a
- * choice made here. Falling back to the in-repo path keeps local development
- * working for anyone who has put a (smaller) export there by hand.
+ * Where the weights live. **This must be configured; there is no working default.**
+ *
+ * The graph is 1.2 GB, which rules out every in-repo option: GitHub rejects blobs
+ * over 100 MB, and free Git LFS gives 1 GB of storage and 1 GB of monthly
+ * bandwidth, which one visitor would exhaust.
+ *
+ * GITHUB RELEASE ASSETS DO NOT WORK HERE, and this was measured rather than
+ * assumed. A release asset is served via a 302 from github.com to
+ * release-assets.githubusercontent.com, and NEITHER hop sends
+ * `Access-Control-Allow-Origin` -- so the file downloads fine by navigation and is
+ * blocked outright for `fetch`. (For contrast, raw.githubusercontent.com does send
+ * `ACAO: *`, but caps files at 100 MB.) A copy is kept on the `model-v1` release
+ * as an archive; it is not fetchable from the page.
+ *
+ * So the weights need an object store that sends CORS. `NEXT_PUBLIC_MODEL_URL`
+ * points at it. Next.js inlines the value at BUILD time, so on Vercel it must be
+ * set as an Environment Variable and the project redeployed -- changing it later
+ * without a rebuild has no effect. See public/models/README.md for the exact
+ * Cloudflare R2 setup.
+ *
+ * With nothing configured the site falls back to the in-repo path, finds nothing,
+ * and runs in clearly-labelled demo mode -- which is the honest failure.
  */
 const MODEL_URL =
   process.env.NEXT_PUBLIC_MODEL_URL || "/models/cleavage.onnx";
@@ -202,15 +220,25 @@ export function loadMeta(): Promise<{ meta: ModelMeta; hasModel: boolean }> {
         const cache = await caches.open(CACHE_NAME);
         if (await cache.match(MODEL_URL)) return { meta, hasModel: true };
       }
-      try {
-        const head = await fetch(MODEL_URL, { method: "HEAD" });
-        return { meta, hasModel: head.ok };
-      } catch {
-        // A cross-origin host that rejects HEAD is not proof of absence, but the
-        // site must not promise a model it cannot show; demo mode is the honest
-        // default and a GET would mean downloading 606 MB just to ask.
-        return { meta, hasModel: false };
+      // Probe cheaply. HEAD first; some hosts (and some CDN redirects) refuse it,
+      // so fall back to a one-byte ranged GET, which costs nothing and exercises
+      // the same CORS path the real download will take. A plain GET is not an
+      // option -- it would pull 1.2 GB just to answer "does this exist".
+      for (const init of [
+        { method: "HEAD" } as RequestInit,
+        { method: "GET", headers: { Range: "bytes=0-0" } } as RequestInit,
+      ]) {
+        try {
+          const r = await fetch(MODEL_URL, init);
+          if (r.ok || r.status === 206) return { meta, hasModel: true };
+        } catch {
+          // try the next probe
+        }
       }
+      // Nothing answered. The model may well exist and be unreachable from the
+      // browser (CORS), but the site must not promise a prediction it cannot
+      // produce, so demo mode -- clearly labelled -- is the honest default.
+      return { meta, hasModel: false };
     } catch {
       return { meta: FALLBACK_META, hasModel: false };
     }
