@@ -9,6 +9,7 @@ import InputPreview from "./InputPreview";
 import MetricsGrid from "./MetricsGrid";
 import PosteriorChart from "./PosteriorChart";
 import RawData from "./RawData";
+import SaliencyPanel from "./SaliencyPanel";
 import Timeline from "./Timeline";
 import { decodePosterior, formatHours, addHours, type Posterior } from "../lib/decode";
 import { prepareImage, type PreparedImage } from "../lib/preprocess";
@@ -188,6 +189,17 @@ export default function Analyzer() {
           </div>
 
           <Panel
+            title="Where the model looked"
+            caption="The region the prediction actually depended on, measured by blanking each square and re-running the model."
+          >
+            <SaliencyPanel
+              image={analysis.image}
+              meta={meta}
+              enabled={analysis.source === "onnx"}
+            />
+          </Panel>
+
+          <Panel
             title="What our corpus looks like at this time"
             caption="Real embryos that were this far from dividing — so the number has something to be checked against."
           >
@@ -227,10 +239,11 @@ export default function Analyzer() {
                   lineHeight: 1.6,
                 }}
               >
-                These 48 numbers are the model&rsquo;s entire output. It does not
-                segment the embryo, mark pronuclei, or localise anything — the backbone
-                pools its features across the whole frame before the head sees them, so
-                no spatial information survives to the prediction.
+                These 48 numbers are the model&rsquo;s entire output — it emits no mask,
+                no landmarks and no attention weights, because the backbone pools its
+                features across the whole frame before the head ever sees them. The map
+                above is therefore not read out of the model; it is <em>measured</em> by
+                blanking part of the image and asking the same model again.
               </p>
             </Panel>
           </div>

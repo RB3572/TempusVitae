@@ -389,3 +389,10 @@ h1.page-title {
     transform: none;
   }
 }
+
+/* The saliency button's progress spinner. Respects reduced-motion: the icon still
+   conveys "working" through the button's disabled state and its counter, so removing
+   the rotation costs nothing. */
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
