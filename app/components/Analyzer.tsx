@@ -17,6 +17,7 @@ import { abortAllSaliency } from "../lib/saliency";
 import {
   FALLBACK_META,
   loadMeta,
+  ModelUnavailableError,
   runInference,
   type InferenceSource,
   type ModelMeta,
@@ -72,7 +73,7 @@ export default function Analyzer() {
         const result = await runInference(image.tensor, meta);
         // The published recipe collapses the posterior with a quantile fitted on
         // training folds, so that -- not the mean or the mode -- is the number every
-        // reported MAE describes. Demo mode has no such recipe, so it keeps the mean.
+        // reported MAE describes -- and every result reaching here is a real one.
         const q =
           result.source === "onnx" && meta.readout === "quantile" && meta.q != null
             ? meta.q
@@ -89,7 +90,16 @@ export default function Analyzer() {
           provider: result.provider,
         });
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Could not read that image.");
+        // An unloadable model is an outage, not a problem with the user's file, and
+        // saying "could not read that image" would send them off hunting for a
+        // conversion tool that was never going to help.
+        setError(
+          e instanceof ModelUnavailableError
+            ? e.message
+            : e instanceof Error
+              ? e.message
+              : "Could not read that image.",
+        );
         setAnalysis(null);
       } finally {
         setBusy(false);
@@ -100,12 +110,17 @@ export default function Analyzer() {
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
-      {hasModel === false && <DemoNotice />}
+      {hasModel === false && <ModelUnavailableNotice />}
 
       <section className="panel">
         <div className={`panel-pad split-grid${analysis ? "" : " single"}`}>
           <div>
-            <DropZone onFile={handleFile} busy={busy} compact={!!analysis} />
+            <DropZone
+              onFile={handleFile}
+              busy={busy}
+              disabled={hasModel === false}
+              compact={!!analysis}
+            />
 
             <label
               style={{
@@ -208,7 +223,7 @@ export default function Analyzer() {
               key={analysis.id}
               image={analysis.image}
               meta={meta}
-              enabled={analysis.source === "onnx"}
+              enabled
             />
           </Panel>
 
@@ -298,15 +313,10 @@ function Headline({
         }}
       >
         <span className="eyebrow">Hours until first cleavage</span>
-        {analysis.source === "demo" ? (
-          <span className="badge badge-warn">
-            <span className="badge-dot" /> Demo output
-          </span>
-        ) : (
-          <span className="badge badge-neutral">
-            <span className="badge-dot" /> {analysis.provider} · {Math.round(analysis.ms)} ms
-          </span>
-        )}
+        {/* One branch, because there is only one kind of result now: a real one. */}
+        <span className="badge badge-neutral">
+          <span className="badge-dot" /> {analysis.provider} · {Math.round(analysis.ms)} ms
+        </span>
       </div>
 
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
@@ -467,49 +477,58 @@ function BimodalWarning({ post }: { post: Posterior }) {
   );
 }
 
-function DemoNotice() {
+/**
+ * Shown when the weights cannot be fetched.
+ *
+ * This replaces a "demo mode" notice that sat above a page which then rendered a
+ * confident synthetic number, a full posterior and a calibrated-looking interval, with a
+ * small amber badge as the only marker. The site served fabricated hours for a full day
+ * that way after its model host began returning 404, and nothing on the page made that
+ * obvious. Danger colour, not warning colour, and the upload path is closed behind it:
+ * there is nothing useful to do until the weights load.
+ */
+function ModelUnavailableNotice() {
   return (
     <div
       className="panel"
+      role="alert"
       style={{
-        background: "var(--warn-bg)",
-        borderColor: "var(--warn-border)",
+        background: "var(--danger-bg)",
+        borderColor: "var(--danger-border)",
         boxShadow: "none",
       }}
     >
       <div className="panel-pad" style={{ display: "flex", gap: 13, alignItems: "flex-start" }}>
         <AlertTriangle
           size={18}
-          style={{ color: "var(--warn-strong)", flex: "none", marginTop: 1 }}
+          style={{ color: "var(--danger)", flex: "none", marginTop: 1 }}
         />
         <div>
           <div
             style={{
-              fontSize: 13.5,
+              fontSize: 14,
               fontWeight: 750,
-              color: "var(--warn-text)",
+              color: "var(--danger-text)",
               letterSpacing: "-0.01em",
               marginBottom: 4,
             }}
           >
-            Demo mode — no trained weights published yet
+            The model is unavailable — this page cannot make a prediction right now
           </div>
           <p
             style={{
               margin: 0,
               fontSize: 12.5,
               fontWeight: 600,
-              color: "var(--warn-text)",
+              color: "var(--danger-text)",
               lineHeight: 1.6,
               maxWidth: "76ch",
             }}
           >
-            Numbers shown below are <strong>synthetic</strong> and tell you nothing
-            about your image. They exist so the interface can be reviewed before the
-            model ships. Drop <code className="mono">cleavage.onnx</code> and{" "}
-            <code className="mono">model_meta.json</code> into{" "}
-            <code className="mono">public/models/</code> and every result becomes real
-            with no code change.
+            The weights could not be fetched, so there is nothing to predict from.
+            Uploading is disabled deliberately: this page will show you{" "}
+            <strong>no estimate at all</strong> rather than a made-up one. It will work
+            again as soon as the weights are reachable — nothing needs to change here.
           </p>
         </div>
       </div>

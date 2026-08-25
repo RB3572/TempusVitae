@@ -8,14 +8,20 @@ export default function DropZone({
   onFile,
   busy,
   compact,
+  disabled = false,
 }: {
   onFile: (file: File) => void;
   busy: boolean;
   compact?: boolean;
+  /** No model to run. Distinct from `busy`, which means a model IS running: reusing
+   *  `busy` for this showed "Analysing… / Running the model in your browser" on a page
+   *  that had no model at all, which is worse than saying nothing. */
+  disabled?: boolean;
 }) {
   const [over, setOver] = useState(false);
   const [rejected, setRejected] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const inert = busy || disabled;
 
   const accept = useCallback(
     (files: FileList | null) => {
@@ -37,22 +43,22 @@ export default function DropZone({
         role="button"
         tabIndex={0}
         aria-label="Drop an embryo image here, or press Enter to browse"
-        onClick={() => !busy && inputRef.current?.click()}
+        onClick={() => !inert && inputRef.current?.click()}
         onKeyDown={(e) => {
-          if ((e.key === "Enter" || e.key === " ") && !busy) {
+          if ((e.key === "Enter" || e.key === " ") && !inert) {
             e.preventDefault();
             inputRef.current?.click();
           }
         }}
         onDragOver={(e) => {
           e.preventDefault();
-          if (!busy) setOver(true);
+          if (!inert) setOver(true);
         }}
         onDragLeave={() => setOver(false)}
         onDrop={(e) => {
           e.preventDefault();
           setOver(false);
-          if (!busy) accept(e.dataTransfer.files);
+          if (!inert) accept(e.dataTransfer.files);
         }}
         style={{
           border: `1.5px dashed ${over ? "#111111" : "#dededb"}`,
@@ -60,7 +66,8 @@ export default function DropZone({
           borderRadius: 16,
           padding: compact ? "22px 18px" : "44px 24px",
           textAlign: "center",
-          cursor: busy ? "progress" : "pointer",
+          cursor: disabled ? "not-allowed" : busy ? "progress" : "pointer",
+          opacity: disabled ? 0.55 : 1,
           transition:
             "border-color .2s cubic-bezier(.2,.8,.2,1), background .2s cubic-bezier(.2,.8,.2,1)",
         }}
@@ -97,10 +104,18 @@ export default function DropZone({
             marginBottom: 4,
           }}
         >
-          {busy ? "Analysing…" : "Drop an embryo image"}
+          {disabled
+            ? "Upload unavailable"
+            : busy
+              ? "Analysing…"
+              : "Drop an embryo image"}
         </div>
         <div style={{ fontSize: 12.5, fontWeight: 600, color: "#747474" }}>
-          {busy ? "Running the model in your browser" : "or click to browse · TIFF, PNG, JPEG"}
+          {disabled
+            ? "the model could not be loaded, so there is nothing to run"
+            : busy
+              ? "Running the model in your browser"
+              : "or click to browse · TIFF, PNG, JPEG"}
         </div>
       </div>
 
@@ -120,6 +135,7 @@ export default function DropZone({
         type="file"
         accept=".tif,.tiff,.png,.jpg,.jpeg,.webp,.bmp,image/*"
         style={{ display: "none" }}
+        disabled={inert}
         onChange={(e) => {
           accept(e.target.files);
           e.target.value = "";

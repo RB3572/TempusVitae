@@ -35,9 +35,15 @@ complete** — 610,438,713 bytes, state `uploaded`, on release `model-v1`, match
 The site's own configuration is also fine: `NEXT_PUBLIC_MODEL_URL` is baked into the
 deployed bundle as `https://models.rishib.com/cleavage.onnx`, which is correct.
 
-**So: one broken credential, nothing else.** The most likely cause is that the GitHub
-token held as a Worker secret expired or was rotated; a fine-grained PAT with a default
-lifetime would land about now.
+**Cause, confirmed by the owner: every repo was made private on 2026-08-24.** Before
+that the release asset was public, so the Worker fetched it anonymously and needed no
+credential at all. Nothing about the Worker changed; the object underneath it stopped
+being anonymously readable.
+
+*(An earlier draft of this file guessed an expired token. That was wrong, and the
+difference matters for the fix: there is probably no credential to refresh, so option 2
+below means ADDING authentication to a Worker that has never had any, not rotating a
+secret that already exists.)*
 
 ---
 
@@ -57,13 +63,17 @@ Then point `models.rishib.com` at the bucket instead of the Worker, keeping the 
 policy already in place (it is correct — `AllowedHeaders` includes `Range`, which the
 site's one-byte existence probe needs).
 
-**2. Or just refresh the Worker's GitHub token.** Faster, but it will expire again. If you
-take this route, set a calendar reminder for the expiry date, because the failure mode is
-silent: the site does not error, it quietly serves synthetic numbers.
+**2. Or give the Worker a GitHub token it never had.** It must be a token that can read
+a private repo's releases, stored as a Worker secret, and the Worker must send it as
+`Authorization: Bearer <token>` on the asset request. Workable, but it trades a public
+object for a credential that will expire, and the failure mode is silent: the site does
+not error, it quietly serves synthetic numbers. If you take this route, put the expiry in
+a calendar.
 
-**3. Making the repo public would also work** and is the one option I would not take —
-release visibility follows repo visibility, so it exposes the whole site source to change
-one credential.
+**3. Making this one repo public again would also work** — it is what changed — but it
+undoes a deliberate decision to fix a hosting detail, and release visibility follows repo
+visibility, so there is no way to expose just the asset. Option 1 gets the same result
+without reversing anything.
 
 ---
 

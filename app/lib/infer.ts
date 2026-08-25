@@ -19,11 +19,11 @@
  * NEXT_PUBLIC_MODEL_URL (inlined at BUILD time -- changing it later needs a
  * rebuild). The first visit downloads it with a progress readout; every visit
  * after that reads it from the Cache API. Until a URL is configured the site
- * stays in clearly-labelled demo mode.
+ * reports that the model is unavailable and refuses to predict.
  *
- * When no model file has been published yet the module reports DEMO status and
+ * When no model file can be fetched the module reports that and
  * synthesises a plausible posterior, so the interface can be reviewed and
- * deployed before the weights are exported. Demo output is never presented as a
+ * surfaces it as an outage. A prediction is never fabricated to fill the gap -- a
  * real prediction -- the UI keys off `source` to say so plainly.
  */
 
@@ -79,7 +79,16 @@ export const FALLBACK_META: ModelMeta = {
   unit: "hours; measured per-embryo frame interval",
 };
 
-export type InferenceSource = "onnx" | "demo";
+export type InferenceSource = "onnx";
+
+/** Thrown when the weights are unavailable. Distinct from a bad-image error so the UI
+ *  can explain an outage as an outage rather than blaming the user's file. */
+export class ModelUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ModelUnavailableError";
+  }
+}
 
 export interface InferenceResult {
   logits: Float32Array;
@@ -110,7 +119,7 @@ export interface InferenceResult {
  * Cloudflare R2 setup.
  *
  * With nothing configured the site falls back to the in-repo path, finds nothing,
- * and runs in clearly-labelled demo mode -- which is the honest failure.
+ * and reports the model as unavailable -- which is the honest failure.
  */
 const MODEL_URL =
   process.env.NEXT_PUBLIC_MODEL_URL || "/models/cleavage.onnx";
@@ -237,7 +246,7 @@ export function loadMeta(): Promise<{ meta: ModelMeta; hasModel: boolean }> {
       }
       // Nothing answered. The model may well exist and be unreachable from the
       // browser (CORS), but the site must not promise a prediction it cannot
-      // produce, so demo mode -- clearly labelled -- is the honest default.
+      // produce, so reporting the model as unavailable is the honest default.
       return { meta, hasModel: false };
     } catch {
       return { meta: FALLBACK_META, hasModel: false };
@@ -299,62 +308,6 @@ async function replaceWithWasmSession() {
   return loaded;
 }
 
-/** Cheap deterministic hash, so one image always yields the same demo posterior. */
-function hashTensor(t: Float32Array): number {
-  let h = 2166136261;
-  const step = Math.max(1, Math.floor(t.length / 512));
-  for (let i = 0; i < t.length; i += step) {
-    h ^= Math.round(t[i] * 4096);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-function mulberry32(seed: number) {
-  let a = seed;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/**
- * A stand-in posterior with the shape the real model produces: usually one broad
- * peak, and roughly a third of the time the genuinely bimodal case the docs warn
- * about (no visible pronuclei -> either very early or about to divide).
- */
-function demoLogits(tensor: Float32Array, meta: ModelMeta): Float32Array {
-  const rand = mulberry32(hashTensor(tensor));
-  const n = meta.nBins;
-  const span = meta.rMax - meta.rMin;
-  const logits = new Float32Array(n);
-
-  const bimodal = rand() < 0.34;
-  const centre1 = 0.15 + rand() * 0.55;
-  const width1 = 0.07 + rand() * 0.1;
-  const centre2 = Math.min(0.95, centre1 + 0.3 + rand() * 0.3);
-  const width2 = 0.05 + rand() * 0.08;
-  const mix = 0.35 + rand() * 0.3;
-
-  for (let i = 0; i < n; i++) {
-    const x = (i + 0.5) / n;
-    const g1 = Math.exp(-((x - centre1) ** 2) / (2 * width1 * width1));
-    let density = g1 * (bimodal ? mix : 1);
-    if (bimodal) {
-      density += Math.exp(-((x - centre2) ** 2) / (2 * width2 * width2)) * (1 - mix);
-    }
-    // Only a whisper of noise. Heavier jitter carves spurious local maxima into
-    // the curve, and the page would then report a handful of "separate answers"
-    // that are pure sampling artefact -- the real model's output is smooth.
-    logits[i] = Math.log(density + 1e-6) + (rand() - 0.5) * 0.06;
-  }
-  void span;
-  return logits;
-}
-
 /**
  * Serialises every inference. One ONNX session cannot service two concurrent `run()`
  * calls -- it throws "Session already started" -- and the WebGPU-to-wasm fallback below
@@ -395,15 +348,18 @@ async function runInferenceUnqueued(
   const loaded = await getSession();
 
   if (!loaded) {
-    // Small deliberate pause: the interface should exercise its own loading
-    // states in demo mode rather than snapping to a result instantly.
-    await new Promise((r) => setTimeout(r, 420));
-    return {
-      logits: demoLogits(tensor, meta),
-      source: "demo",
-      ms: performance.now() - started,
-      provider: "none",
-    };
+    // NO SYNTHETIC FALLBACK. This used to fabricate a plausible posterior and label it
+    // "demo output" with a small badge. That is a worse failure than an error: the page
+    // still rendered a confident number, a full distribution and an interval, and the
+    // only thing distinguishing it from a real result was a badge most people will not
+    // read. The site went a full day serving fabricated hours that way, after the model
+    // host started returning 404, and nobody noticed from the page itself.
+    //
+    // A tool that reports a measurement must not invent one when it cannot measure.
+    throw new ModelUnavailableError(
+      "The model weights could not be loaded, so there is nothing to predict from. " +
+      "No estimate is shown rather than a made-up one.",
+    );
   }
 
   const ort = await import("onnxruntime-web");

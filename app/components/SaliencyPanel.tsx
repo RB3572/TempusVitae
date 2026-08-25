@@ -55,7 +55,7 @@ export default function SaliencyPanel({
       const r = await occlusionMap(image.tensor, meta, (d) => setDone(d), ac);
       if (!ac.signal.aborted) {
         if (r) setResult(r);
-        else setError("Needs the real model — the demo output has nothing to explain.");
+        else setError("The measurement was cancelled before it finished.");
       }
     } catch (e) {
       if (!ac.signal.aborted) {
@@ -68,24 +68,10 @@ export default function SaliencyPanel({
 
   useEffect(() => () => abort.current?.abort(), []);
 
-  // Demo mode has no real model to interrogate, but returning null left the parent
-  // rendering a titled panel with an EMPTY body -- which reads as a broken feature
-  // rather than an unavailable one. Say why instead.
-  if (!enabled) {
-    return (
-      <p
-        style={{
-          margin: 0, fontSize: 12, fontWeight: 600, lineHeight: 1.6,
-          color: "var(--accent-soft)", maxWidth: "80ch",
-        }}
-      >
-        Unavailable right now: the page is showing{" "}
-        <strong>demo output</strong>, and a synthetic number has nothing to explain.
-        This map is measured by blanking part of your image and re-running the real
-        model, so it appears as soon as the weights load.
-      </p>
-    );
-  }
+  // `enabled` is effectively always true now: the page refuses to produce any result
+  // without real weights, so the synthetic case this used to explain cannot occur.
+  // Kept as a prop so a caller has to state the intent rather than rendering blind.
+  if (!enabled) return null;
 
   return (
     <div style={{ display: "grid", gap: 14 }}>

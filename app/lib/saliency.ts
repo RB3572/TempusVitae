@@ -110,7 +110,11 @@ async function measure(
   const fill = meanOf(tensor);
 
   const first = await runInference(tensor, meta);
-  if (first.source !== "onnx") return null;   // demo mode explains nothing
+  // Defensive: runInference now throws rather than returning a synthetic result, so
+  // this cannot fire. Left as a hard stop against a future fallback being added
+  // back, because measuring a fabricated prediction would produce a heatmap of
+  // nothing that looked exactly like a real one.
+  if (first.source !== "onnx") return null;
   const base = readout(first.logits, meta);
 
   const map = new Float32Array(GRID * GRID);
