@@ -233,9 +233,25 @@ export function loadMeta(): Promise<{ meta: ModelMeta; hasModel: boolean }> {
       // so fall back to a one-byte ranged GET, which costs nothing and exercises
       // the same CORS path the real download will take. A plain GET is not an
       // option -- it would pull 610 MB just to answer "does this exist".
+      //
+      // `cache: "no-store"` ON THE PROBE, and it is load-bearing. During an outage the
+      // model host answered 404 while still sending
+      // `Cache-Control: public, max-age=31536000, immutable` -- a year-long instruction
+      // to remember that the file does not exist. Once the file came back, browsers that
+      // had visited during the outage kept reading their cached 404 and the site stayed
+      // stuck in its unavailable state with a perfectly healthy origin behind it.
+      // Measured: a normal fetch returned 404 while the same request with
+      // `cache: "reload"` returned 206 from the same browser, same second.
+      //
+      // The probe is one byte, so never caching it costs nothing. The 610 MB download
+      // that follows still uses the cache, which is where caching actually matters.
       for (const init of [
-        { method: "HEAD" } as RequestInit,
-        { method: "GET", headers: { Range: "bytes=0-0" } } as RequestInit,
+        { method: "HEAD", cache: "no-store" } as RequestInit,
+        {
+          method: "GET",
+          cache: "no-store",
+          headers: { Range: "bytes=0-0" },
+        } as RequestInit,
       ]) {
         try {
           const r = await fetch(MODEL_URL, init);
