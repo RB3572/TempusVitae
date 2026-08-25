@@ -9,6 +9,7 @@ import InputPreview from "./InputPreview";
 import MetricsGrid from "./MetricsGrid";
 import PosteriorChart from "./PosteriorChart";
 import RawData from "./RawData";
+import SaliencyGallery from "./SaliencyGallery";
 import SaliencyPanel from "./SaliencyPanel";
 import Timeline from "./Timeline";
 import { decodePosterior, formatHours, addHours, type Posterior } from "../lib/decode";
@@ -217,14 +218,38 @@ export default function Analyzer() {
 
           <Panel
             title="Where the model looked"
-            caption="The region the prediction actually depended on, measured by blanking each square and re-running the model."
+            caption="Which regions the prediction depends on at this stage, measured by blanking each patch and re-running the whole model."
           >
-            <SaliencyPanel
-              key={analysis.id}
-              image={analysis.image}
-              meta={meta}
-              enabled
+            {/* The pre-rendered gallery first: it is instant, finer-grained (the
+                model's own 16x16 patch grid), and answers "what does the model look at
+                at this stage" without asking anyone to wait. The live measurement below
+                answers the different question -- "what did it look at in MY image" --
+                and costs a forward pass per patch, so it stays behind its button. */}
+            <SaliencyGallery
+              hours={
+                analysis.post.readoutQ === null
+                  ? analysis.post.mode
+                  : analysis.post.readout
+              }
             />
+            <details style={{ marginTop: 16 }}>
+              <summary
+                style={{
+                  cursor: "pointer", fontSize: 12, fontWeight: 700,
+                  color: "var(--muted)",
+                }}
+              >
+                Measure it on my own image instead (slow)
+              </summary>
+              <div style={{ marginTop: 12 }}>
+                <SaliencyPanel
+                  key={analysis.id}
+                  image={analysis.image}
+                  meta={meta}
+                  enabled
+                />
+              </div>
+            </details>
           </Panel>
 
           <Panel
