@@ -1,0 +1,29 @@
+# What must never be uploaded to Vercel.
+#
+# THIS FILE EXISTS BECAUSE .gitignore IS NOT ENOUGH. A `vercel --prod` from a working
+# copy uploaded 1.7 GB and failed on "File size limit exceeded (100 MB)", even though
+# both weight files are matched by .gitignore. The CLI does not treat .gitignore as
+# authoritative for the upload set, so the exclusions have to be stated here as well.
+#
+# The weights are hosted externally and reached via NEXT_PUBLIC_MODEL_URL. They are
+# present in a working copy only because that is where the export writes them.
+public/models/*.onnx
+
+# Build output. A remote build regenerates it; uploading it is pure transfer cost.
+.next/
+out/
+
+# The corpus previews under public/corpus/ ARE wanted -- they are 425 KB of WebP that the
+# site serves directly. Do not add public/ wholesale here.
+
+# Local-only scratch
+*.log
+export_champ*.log
+shrink.log
+__pycache__/
+scripts/__pycache__/
+.env*.local
+
+# macOS sidecars, from the corpus drive
+._*
+.DS_Store
