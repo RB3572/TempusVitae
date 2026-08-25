@@ -17,25 +17,53 @@ import { runInference, type ModelMeta } from "./infer";
  * frame looks convincing whatever it measures, so the control is what makes it evidence.
  * The number is shown next to the map in the UI.
  *
- * THE COST IS REAL AND IS NOT HIDDEN. Every cell is a full forward pass, and each forward
- * pass is eight TTA views of a ViT-L. At GRID=6 that is 36 passes. On WebGPU that is
- * tens of seconds; on the wasm fallback it is minutes, which is why this is an explicit
- * button and not something that runs on every upload.
+ * THE COST IS REAL, MEASURED, AND SHOWN. Every cell is a full forward pass, and each
+ * forward pass is eight TTA views of a ViT-L -- the deployed graph bakes the views in, so
+ * there is no cheaper mode to ask for. Timed against the live site on the wasm backend:
+ * 71 seconds PER CELL, which would make a fixed 6x6 grid a 43-minute job. So the grid is
+ * not fixed: one pass is timed first, and the finest grid that fits the time budget is
+ * chosen from that. The user sees the measured seconds-per-cell and a real total before
+ * the run commits, and can stop it at any point.
  */
 
-/** Cells per side. 6x6 keeps it under a minute on WebGPU and still resolves the cell
- *  against its surroundings; 16x16 would match the model's own patch grid and take
- *  seven times longer. */
-export const GRID = 6;
+/**
+ * Grid sizes we are willing to use, coarsest last.
+ *
+ * NOT A CONSTANT ANY MORE, and the reason is measured. Each cell is a full forward pass
+ * and the deployed graph bakes in eight TTA views, so one cell costs one whole inference.
+ * On the wasm backend that was timed at **71 seconds per cell** against the live site,
+ * which makes a fixed 6x6 grid a **43 minute** job. The button cheerfully said "minutes
+ * on wasm". Nobody waits 43 minutes, so the map may as well not exist.
+ *
+ * The fix is to size the grid to the machine rather than to a guess: time the first pass,
+ * then pick the finest grid whose projected total fits the budget. WebGPU gets 6x6, wasm
+ * gets 3x3 and finishes in about ten minutes, and either way the estimate shown to the
+ * user is one that was measured on their hardware rather than assumed.
+ */
+export const GRID_CHOICES = [6, 5, 4, 3] as const;
+
+/** Seconds we are willing to spend before falling back to a coarser grid. */
+export const TIME_BUDGET_S = 150;
 
 export interface SaliencyResult {
-  /** GRID x GRID, row-major, normalised to 0..1. |change in predicted hours| per cell. */
+  /** grid x grid, row-major, normalised to 0..1. |change in predicted hours| per cell. */
   map: Float32Array;
+  /** Cells per side actually used -- chosen from measured speed, so read it, do not assume. */
+  grid: number;
   /** Predicted hours on the untouched image. */
   base: number;
   /** Largest absolute shift any single cell caused, in hours. */
   maxShift: number;
   ms: number;
+}
+
+/** What one timed probe pass told us, before committing to a full run. */
+export interface SaliencyPlan {
+  grid: number;
+  /** Seconds one cell took, measured on this machine with this backend. */
+  secondsPerCell: number;
+  /** Projected seconds for the whole grid, from that measurement. */
+  projectedSeconds: number;
 }
 
 /**
@@ -83,6 +111,7 @@ export async function occlusionMap(
   meta: ModelMeta,
   onProgress?: (done: number, total: number) => void,
   controller?: AbortController,
+  onPlan?: (plan: SaliencyPlan) => void,
 ): Promise<SaliencyResult | null> {
   // Takes the CALLER'S controller, not just its signal, and registers that. An earlier
   // version created a private controller and aborted only that, so abortAllSaliency
@@ -92,7 +121,7 @@ export async function occlusionMap(
   if (controller) inFlight.add(controller);
   const stopped = () => controller?.signal.aborted ?? false;
   try {
-    return await measure(tensor, meta, onProgress, stopped);
+    return await measure(tensor, meta, onProgress, onPlan, stopped);
   } finally {
     if (controller) inFlight.delete(controller);
   }
@@ -102,59 +131,87 @@ async function measure(
   tensor: Float32Array,
   meta: ModelMeta,
   onProgress: ((done: number, total: number) => void) | undefined,
+  onPlan: ((plan: SaliencyPlan) => void) | undefined,
   stopped: () => boolean,
 ): Promise<SaliencyResult | null> {
   const t0 = performance.now();
   const size = meta.imageSize;
-  const cell = Math.ceil(size / GRID);
   const fill = meanOf(tensor);
 
   const first = await runInference(tensor, meta);
-  // Defensive: runInference now throws rather than returning a synthetic result, so
-  // this cannot fire. Left as a hard stop against a future fallback being added
-  // back, because measuring a fabricated prediction would produce a heatmap of
-  // nothing that looked exactly like a real one.
+  // Defensive: runInference now throws rather than returning a synthetic result, so this
+  // cannot fire. Left as a hard stop against a future fallback being added back, because
+  // measuring a fabricated prediction would produce a heatmap of nothing that looked
+  // exactly like a real one.
   if (first.source !== "onnx") return null;
   const base = readout(first.logits, meta);
+  if (stopped()) return null;
 
-  const map = new Float32Array(GRID * GRID);
+  // Time ONE masked pass, on the coarsest grid's cell size, and let that choose the grid.
+  // The base inference above is not a fair timer: the weights may still have been
+  // arriving, and the first pass through a fresh session pays warm-up the rest do not.
+  const probeGrid = GRID_CHOICES[GRID_CHOICES.length - 1];
+  const tProbe = performance.now();
+  await runInference(maskCell(tensor, size, probeGrid, 0, 0, fill), meta);
+  const secondsPerCell = (performance.now() - tProbe) / 1000;
+  if (stopped()) return null;
+
+  const grid =
+    GRID_CHOICES.find((g) => g * g * secondsPerCell <= TIME_BUDGET_S) ??
+    GRID_CHOICES[GRID_CHOICES.length - 1];
+  onPlan?.({ grid, secondsPerCell, projectedSeconds: grid * grid * secondsPerCell });
+
+  const map = new Float32Array(grid * grid);
   let maxShift = 0;
-  for (let gy = 0; gy < GRID; gy++) {
-    for (let gx = 0; gx < GRID; gx++) {
+  for (let gy = 0; gy < grid; gy++) {
+    for (let gx = 0; gx < grid; gx++) {
       if (stopped()) return null;
-      const masked = Float32Array.from(tensor);
-      const y1 = Math.min(size, (gy + 1) * cell);
-      const x1 = Math.min(size, (gx + 1) * cell);
-      for (let y = gy * cell; y < y1; y++) {
-        masked.fill(fill, y * size + gx * cell, y * size + x1);
-      }
-      const r = await runInference(masked, meta);
+      const r = await runInference(maskCell(tensor, size, grid, gy, gx, fill), meta);
       const shift = Math.abs(readout(r.logits, meta) - base);
-      map[gy * GRID + gx] = shift;
+      map[gy * grid + gx] = shift;
       if (shift > maxShift) maxShift = shift;
-      onProgress?.(gy * GRID + gx + 1, GRID * GRID);
+      onProgress?.(gy * grid + gx + 1, grid * grid);
     }
   }
 
   // Normalise for display only; maxShift carries the real magnitude in hours so the UI
   // can say how much the model actually depended on any region.
   if (maxShift > 0) for (let i = 0; i < map.length; i++) map[i] /= maxShift;
-  return { map, base, maxShift, ms: performance.now() - t0 };
+  return { map, grid, base, maxShift, ms: performance.now() - t0 };
+}
+
+/** A copy of `tensor` with one grid cell blanked to `fill`. */
+function maskCell(
+  tensor: Float32Array,
+  size: number,
+  grid: number,
+  gy: number,
+  gx: number,
+  fill: number,
+): Float32Array {
+  const cell = Math.ceil(size / grid);
+  const out = Float32Array.from(tensor);
+  const y1 = Math.min(size, (gy + 1) * cell);
+  const x1 = Math.min(size, (gx + 1) * cell);
+  for (let y = gy * cell; y < y1; y++) {
+    out.fill(fill, y * size + gx * cell, y * size + x1);
+  }
+  return out;
 }
 
 /** Bilinear upsample of the coarse grid to `size` px, for drawing. */
-export function upsample(map: Float32Array, size: number): Float32Array {
+export function upsample(map: Float32Array, size: number, grid: number): Float32Array {
   const out = new Float32Array(size * size);
   const at = (gy: number, gx: number) =>
-    map[Math.min(GRID - 1, Math.max(0, gy)) * GRID + Math.min(GRID - 1, Math.max(0, gx))];
+    map[Math.min(grid - 1, Math.max(0, gy)) * grid + Math.min(grid - 1, Math.max(0, gx))];
   for (let y = 0; y < size; y++) {
     // Sample at cell CENTRES, hence the -0.5: sampling at cell corners shifts the whole
     // field half a cell up and left, which is small enough to look fine and wrong enough
     // to put the hot spot off the pronuclei.
-    const fy = (y / size) * GRID - 0.5;
+    const fy = (y / size) * grid - 0.5;
     const y0 = Math.floor(fy), wy = fy - y0;
     for (let x = 0; x < size; x++) {
-      const fx = (x / size) * GRID - 0.5;
+      const fx = (x / size) * grid - 0.5;
       const x0 = Math.floor(fx), wx = fx - x0;
       const a = at(y0, x0) * (1 - wx) + at(y0, x0 + 1) * wx;
       const b = at(y0 + 1, x0) * (1 - wx) + at(y0 + 1, x0 + 1) * wx;

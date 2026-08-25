@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Eye, Loader2, XCircle } from "lucide-react";
-import { GRID, jet, occlusionMap, upsample, type SaliencyResult } from "../lib/saliency";
+import {
+  jet,
+  occlusionMap,
+  upsample,
+  type SaliencyPlan,
+  type SaliencyResult,
+} from "../lib/saliency";
 import type { ModelMeta } from "../lib/infer";
 import type { PreparedImage } from "../lib/preprocess";
 
@@ -31,6 +37,11 @@ export default function SaliencyPanel({
   const [result, setResult] = useState<SaliencyResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(0);
+  const [total, setTotal] = useState(0);
+  // The measured plan: how long one cell took on THIS machine and what that implies for
+  // the whole grid. Shown to the user rather than a guess, because the guess was wrong by
+  // an order of magnitude on the wasm backend.
+  const [plan, setPlan] = useState<SaliencyPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
 
@@ -51,8 +62,16 @@ export default function SaliencyPanel({
     setBusy(true);
     setError(null);
     setDone(0);
+    setTotal(0);
+    setPlan(null);
     try {
-      const r = await occlusionMap(image.tensor, meta, (d) => setDone(d), ac);
+      const r = await occlusionMap(
+        image.tensor,
+        meta,
+        (d, t) => { setDone(d); setTotal(t); },
+        ac,
+        (pl) => setPlan(pl),
+      );
       if (!ac.signal.aborted) {
         if (r) setResult(r);
         else setError("The measurement was cancelled before it finished.");
@@ -79,12 +98,20 @@ export default function SaliencyPanel({
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <button className="btn btn-secondary" onClick={run} disabled={busy}>
             {busy ? <Loader2 size={15} className="spin" /> : <Eye size={15} />}
-            {busy ? `Measuring… ${done}/${GRID * GRID}` : "Show what the model used"}
+            {busy
+              ? total
+                ? `Measuring… ${done}/${total}`
+                : "Timing one pass…"
+              : "Show what the model used"}
           </button>
           <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--accent-soft)" }}>
             {busy
-              ? "each square is a full re-run of the model"
-              : `${GRID * GRID} extra forward passes — tens of seconds on WebGPU, minutes on wasm`}
+              ? plan
+                ? `${plan.grid}×${plan.grid} grid · ${plan.secondsPerCell.toFixed(1)} s per square here` +
+                  ` · about ${Math.max(1, Math.round(plan.projectedSeconds / 60))} min total`
+                : "measuring how fast this machine runs the model"
+              : "each square is a full re-run of the model — the grid is sized to your" +
+                " hardware, and the estimate appears once one square has been timed"}
           </span>
           {busy && (
             <button
@@ -119,7 +146,8 @@ function Panels({ image, result }: { image: PreparedImage; result: SaliencyResul
 
   useEffect(() => {
     const px = image.tensor;
-    const smooth = upsample(result.map, size);
+    const grid = result.grid;
+    const smooth = upsample(result.map, size, grid);
 
     // The threshold for panel (c) is taken on the COARSE map, not the smoothed one, so
     // the region shown is exactly the set of cells that were actually measured. Taking
@@ -146,9 +174,9 @@ function Panels({ image, result }: { image: PreparedImage; result: SaliencyResul
           gg = Math.round(g * (1 - a) + jg * a);
           b = Math.round(g * (1 - a) + jb * a);
         } else if (panel === 2) {
-          const gy = Math.min(GRID - 1, Math.floor((Math.floor(i / size) / size) * GRID));
-          const gx = Math.min(GRID - 1, Math.floor(((i % size) / size) * GRID));
-          if (result.map[gy * GRID + gx] < thr) { r = gg = b = 0; }
+          const gy = Math.min(grid - 1, Math.floor((Math.floor(i / size) / size) * grid));
+          const gx = Math.min(grid - 1, Math.floor(((i % size) / size) * grid));
+          if (result.map[gy * grid + gx] < thr) { r = gg = b = 0; }
         }
         img.data[i * 4] = r;
         img.data[i * 4 + 1] = gg;
