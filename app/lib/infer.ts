@@ -355,7 +355,39 @@ function demoLogits(tensor: Float32Array, meta: ModelMeta): Float32Array {
   return logits;
 }
 
-export async function runInference(
+/**
+ * Serialises every inference. One ONNX session cannot service two concurrent `run()`
+ * calls -- it throws "Session already started" -- and the WebGPU-to-wasm fallback below
+ * makes that worse than a thrown error, because it RELEASES the session and builds a new
+ * one. A second call in flight at that moment is holding a session that has just been
+ * freed.
+ *
+ * This was not reachable while the page ran one inference per upload. The saliency map
+ * changed that: it issues 36 back-to-back calls, and a user who drops a new image
+ * part-way through interleaves a 37th. Observed exactly that way, as a
+ * "Session already started" alert that cleared the whole result.
+ *
+ * A promise chain rather than a lock: each call waits for the previous one to settle
+ * (`catch` so a failure does not wedge the queue forever) and then runs. Order is
+ * preserved, which is what the occlusion loop wants anyway.
+ */
+let inferenceQueue: Promise<unknown> = Promise.resolve();
+
+export function runInference(
+  tensor: Float32Array,
+  meta: ModelMeta,
+): Promise<InferenceResult> {
+  const run = inferenceQueue.then(
+    () => runInferenceUnqueued(tensor, meta),
+    () => runInferenceUnqueued(tensor, meta),
+  );
+  // The queue tracks completion, not success, so one rejected inference does not
+  // permanently block the next.
+  inferenceQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function runInferenceUnqueued(
   tensor: Float32Array,
   meta: ModelMeta,
 ): Promise<InferenceResult> {

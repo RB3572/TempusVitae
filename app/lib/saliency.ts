@@ -58,11 +58,51 @@ function readout(logits: Float32Array, meta: ModelMeta): number {
   return post.readoutQ === null ? post.mean : post.readout;
 }
 
+/**
+ * Every measurement currently in flight.
+ *
+ * Inference is serialised (see infer.ts), so a saliency run holds the queue for up to 36
+ * passes. A user who drops a new image mid-measurement would otherwise wait behind all
+ * of them -- minutes on wasm -- because their upload is just another queued call.
+ * `abortAllSaliency` lets the page cancel the explanation the moment a new image
+ * arrives: the loop stops after its current pass and the upload is next in line.
+ *
+ * Unmounting the panel aborts its own run too; this exists for the case where the parent
+ * needs the queue back BEFORE the unmount, which is exactly the new-upload case, since
+ * the unmount is itself waiting on that upload's inference to finish.
+ */
+const inFlight = new Set<AbortController>();
+
+export function abortAllSaliency() {
+  for (const ac of inFlight) ac.abort();
+  inFlight.clear();
+}
+
 export async function occlusionMap(
   tensor: Float32Array,
   meta: ModelMeta,
   onProgress?: (done: number, total: number) => void,
-  signal?: AbortSignal,
+  controller?: AbortController,
+): Promise<SaliencyResult | null> {
+  // Takes the CALLER'S controller, not just its signal, and registers that. An earlier
+  // version created a private controller and aborted only that, so abortAllSaliency
+  // stopped the loop without the panel ever learning it had been cancelled -- the panel
+  // then read the null return as "no model" and showed the wrong error. Whoever owns the
+  // controller owns the cancellation; there is only one of them now.
+  if (controller) inFlight.add(controller);
+  const stopped = () => controller?.signal.aborted ?? false;
+  try {
+    return await measure(tensor, meta, onProgress, stopped);
+  } finally {
+    if (controller) inFlight.delete(controller);
+  }
+}
+
+async function measure(
+  tensor: Float32Array,
+  meta: ModelMeta,
+  onProgress: ((done: number, total: number) => void) | undefined,
+  stopped: () => boolean,
 ): Promise<SaliencyResult | null> {
   const t0 = performance.now();
   const size = meta.imageSize;
@@ -77,7 +117,7 @@ export async function occlusionMap(
   let maxShift = 0;
   for (let gy = 0; gy < GRID; gy++) {
     for (let gx = 0; gx < GRID; gx++) {
-      if (signal?.aborted) return null;
+      if (stopped()) return null;
       const masked = Float32Array.from(tensor);
       const y1 = Math.min(size, (gy + 1) * cell);
       const x1 = Math.min(size, (gx + 1) * cell);

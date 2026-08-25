@@ -34,16 +34,15 @@ export default function SaliencyPanel({
   const [error, setError] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
 
-  // A new image invalidates the old map. Without this the panel keeps showing the
-  // previous frame's heatmap over the new frame, which is the most misleading thing
-  // this component could possibly do.
-  useEffect(() => {
-    abort.current?.abort();
-    setResult(null);
-    setBusy(false);
-    setDone(0);
-    setError(null);
-  }, [image]);
+  // A new image invalidates the old map -- showing the previous frame's heatmap over
+  // the new frame is the most misleading thing this component could do. That reset is
+  // handled by the PARENT, which gives this component a `key` derived from the analysis
+  // id, so React unmounts and remounts it and every piece of state above goes with it.
+  //
+  // The reset used to live here as an effect that called four setStates on [image].
+  // That is the cascading-render pattern React explicitly warns about, and it is also
+  // strictly weaker: an effect runs AFTER the render that already painted the stale map.
+  // Remounting cannot leave a stale frame on screen even for one paint.
 
   const run = useCallback(async () => {
     abort.current?.abort();
@@ -53,7 +52,7 @@ export default function SaliencyPanel({
     setError(null);
     setDone(0);
     try {
-      const r = await occlusionMap(image.tensor, meta, (d) => setDone(d), ac.signal);
+      const r = await occlusionMap(image.tensor, meta, (d) => setDone(d), ac);
       if (!ac.signal.aborted) {
         if (r) setResult(r);
         else setError("Needs the real model — the demo output has nothing to explain.");
@@ -108,8 +107,12 @@ export default function SaliencyPanel({
 
 function Panels({ image, result }: { image: PreparedImage; result: SaliencyResult }) {
   const size = Math.sqrt(image.tensor.length) | 0;
-  const refs = [useRef<HTMLCanvasElement>(null), useRef<HTMLCanvasElement>(null),
-                useRef<HTMLCanvasElement>(null)];
+  // ONE ref holding three canvases, not three refs in a fresh array. The array literal
+  // was rebuilt on every render, so the effect closed over a different object each time
+  // and the linter was right to call it a mutation of a value that does not survive the
+  // render. A single ref is stable, needs no dependency entry, and the callback refs
+  // below keep the slots filled in order.
+  const canvases = useRef<(HTMLCanvasElement | null)[]>([null, null, null]);
 
   useEffect(() => {
     const px = image.tensor;
@@ -123,7 +126,7 @@ function Panels({ image, result }: { image: PreparedImage; result: SaliencyResul
     const thr = sorted[Math.max(0, Math.floor(KEEP * sorted.length) - 1)];
 
     for (let panel = 0; panel < 3; panel++) {
-      const c = refs[panel].current;
+      const c = canvases.current[panel];
       if (!c) continue;
       c.width = size;
       c.height = size;
@@ -176,7 +179,7 @@ function Panels({ image, result }: { image: PreparedImage; result: SaliencyResul
               {t}
             </figcaption>
             <canvas
-              ref={refs[i]}
+              ref={(el) => { canvases.current[i] = el; }}
               style={{
                 width: "100%", height: "auto", aspectRatio: "1 / 1",
                 display: "block", borderRadius: 10, imageRendering: "auto",

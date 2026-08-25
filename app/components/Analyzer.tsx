@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Clock, RotateCcw, TriangleAlert } from "lucide-react";
 import CdfChart from "./CdfChart";
 import CorpusStrip from "./CorpusStrip";
@@ -13,6 +13,7 @@ import SaliencyPanel from "./SaliencyPanel";
 import Timeline from "./Timeline";
 import { decodePosterior, formatHours, addHours, type Posterior } from "../lib/decode";
 import { prepareImage, type PreparedImage } from "../lib/preprocess";
+import { abortAllSaliency } from "../lib/saliency";
 import {
   FALLBACK_META,
   loadMeta,
@@ -22,6 +23,10 @@ import {
 } from "../lib/infer";
 
 interface Analysis {
+  /** Monotonic per-analysis id. Used as SaliencyPanel's `key`, so a new result
+   *  remounts it and its heatmap cannot outlive the frame it was measured on.
+   *  fileName is not enough -- the same file dropped twice is a different analysis. */
+  id: number;
   fileName: string;
   image: PreparedImage;
   post: Posterior;
@@ -38,6 +43,7 @@ export default function Analyzer() {
   const [error, setError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [capturedAtRaw, setCapturedAtRaw] = useState("");
+  const nextId = useRef(0);
 
   useEffect(() => {
     loadMeta().then((r) => {
@@ -54,6 +60,11 @@ export default function Analyzer() {
 
   const handleFile = useCallback(
     async (file: File) => {
+      // Cancel any explanation still running. Inference is serialised, so a saliency
+      // measurement in flight owns the queue for up to 36 passes and this upload would
+      // sit behind all of them -- minutes on wasm. Aborting first puts the user's own
+      // image next in line, which is the only ordering that makes sense.
+      abortAllSaliency();
       setBusy(true);
       setError(null);
       try {
@@ -68,6 +79,7 @@ export default function Analyzer() {
             : null;
         const post = decodePosterior(result.logits, meta.rMin, meta.rMax, 0.8, q);
         setAnalysis({
+          id: ++nextId.current,
           fileName: file.name,
           image,
           post,
@@ -193,6 +205,7 @@ export default function Analyzer() {
             caption="The region the prediction actually depended on, measured by blanking each square and re-running the model."
           >
             <SaliencyPanel
+              key={analysis.id}
               image={analysis.image}
               meta={meta}
               enabled={analysis.source === "onnx"}
