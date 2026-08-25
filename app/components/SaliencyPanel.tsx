@@ -68,7 +68,24 @@ export default function SaliencyPanel({
 
   useEffect(() => () => abort.current?.abort(), []);
 
-  if (!enabled) return null;
+  // Demo mode has no real model to interrogate, but returning null left the parent
+  // rendering a titled panel with an EMPTY body -- which reads as a broken feature
+  // rather than an unavailable one. Say why instead.
+  if (!enabled) {
+    return (
+      <p
+        style={{
+          margin: 0, fontSize: 12, fontWeight: 600, lineHeight: 1.6,
+          color: "var(--accent-soft)", maxWidth: "80ch",
+        }}
+      >
+        Unavailable right now: the page is showing{" "}
+        <strong>demo output</strong>, and a synthetic number has nothing to explain.
+        This map is measured by blanking part of your image and re-running the real
+        model, so it appears as soon as the weights load.
+      </p>
+    );
+  }
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
