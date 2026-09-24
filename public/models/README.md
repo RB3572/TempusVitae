@@ -96,7 +96,7 @@ curl -sI -H "Origin: https://your-site.vercel.app"      "$NEXT_PUBLIC_MODEL_URL"
 ```
 
    If that prints nothing, the browser will be blocked exactly as GitHub Releases were,
-   and the site will sit in demo mode.
+   and the site will report the model as unavailable rather than generating a result.
 
 ### A word about the download
 

@@ -44,7 +44,7 @@ Each was tested, not assumed. Every one looks like it works until a browser trie
 
 **`AllowedHeaders` must include `Range`.** The site probes for the model with a one-byte
 ranged GET rather than downloading 610 MB to ask whether it exists. Without `Range` in
-the CORS policy that probe fails and the page silently drops to demo mode.
+the CORS policy that probe fails and the page reports the model as unavailable.
 
 **`NEXT_PUBLIC_MODEL_URL` needs a redeploy, not just a save.** Next.js inlines
 `NEXT_PUBLIC_*` at build time. Changing the variable in the Vercel dashboard without
@@ -54,11 +54,13 @@ rebuilding changes nothing on the deployed site.
 
 ## How to tell it is working
 
-Open the site. **The absence of the amber "Demo output" badge means the model was
-found.** The badge instead shows the execution provider and a timing — `webgpu` when the
-browser supports it, `wasm` otherwise (wasm is 20–35 s for a ViT-L with eight TTA views,
-which is slow but correct). The headline should read a plausible number of hours with a
-"model readout · fitted quantile q=0.48" caption.
+Open the site and wait for the availability probe. When the model is reachable, the image
+upload control becomes enabled. If it is not reachable, the page shows a red outage notice
+and refuses uploads; it never displays a substitute prediction. A completed prediction
+shows the execution provider and timing — `webgpu` when the browser supports it, `wasm`
+otherwise (wasm is 20–35 s for a ViT-L with eight TTA views, which is slow but correct).
+The headline should read a plausible number of hours with a "model readout · fitted
+quantile q=0.48" caption.
 
 First load fetches 610 MB with a progress readout, then caches it in the browser's Cache
 API, so later visits are instant.

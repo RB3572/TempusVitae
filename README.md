@@ -44,8 +44,8 @@ weights need an object store that sends CORS - Cloudflare R2 is the one this pro
 targets, and [`public/models/README.md`](public/models/README.md) has the exact setup.
 
 Set `NEXT_PUBLIC_MODEL_URL` to that URL and rebuild; Next.js inlines it at build time.
-With nothing set, the site runs in clearly-labelled demo mode with a synthetic
-posterior.
+If the weights cannot be reached, the site disables uploads and reports the outage.
+It never substitutes a synthetic posterior for a model prediction.
 
 ## The model on the page
 
