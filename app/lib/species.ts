@@ -50,7 +50,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
   mouse: {
     id: "mouse",
     label: "Mouse",
-    title: "Zygote cleavage-time model",
+    title: "Mouse zygote cleavage-time model",
     subtitle:
       "Hours remaining until first cleavage, from a single still of a mouse zygote.",
     metaUrl: "/models/model_meta.json",
