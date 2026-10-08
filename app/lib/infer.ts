@@ -29,6 +29,8 @@
 
 import type { InferenceSession, TypedTensor } from "onnxruntime-web";
 
+import type { Species, SpeciesId } from "./species";
+
 export interface ModelMeta {
   /** Lower edge of the first bin, hours. */
   rMin: number;
@@ -61,6 +63,19 @@ export interface ModelMeta {
   externalMae?: number;
   heldOutSessions?: string[];
   exportedAt?: string;
+  /**
+   * CALIBRATED INTERVAL. `intervalMass` is the probability mass whose narrowest span
+   * actually contains the truth `intervalCoverage` of the time, solved out of fold. The
+   * two are far apart on a head trained against soft targets, which is over-confident:
+   * the human model's raw 80%-mass span covers only 28.6% of the time, so it draws its
+   * interval at a mass of 0.9999 to reach 79.2% real coverage. The MASS is calibrated
+   * rather than the width, so the span stays shape-aware and a two-peaked posterior
+   * still yields a span that skips the gap. Absent -- as on the mouse model, whose
+   * 80% mass is already honest -- the page draws 0.8 and claims nothing further.
+   */
+  intervalMass?: number;
+  intervalCoverage?: number;
+
 }
 
 /** Used until a real model_meta.json is published alongside the weights. */
@@ -121,10 +136,17 @@ export interface InferenceResult {
  * With nothing configured the site falls back to the in-repo path, finds nothing,
  * and reports the model as unavailable -- which is the honest failure.
  */
-const MODEL_URL =
-  process.env.NEXT_PUBLIC_MODEL_URL || "/models/cleavage.onnx";
-const META_URL = "/models/model_meta.json";
-const CACHE_NAME = "tempusvitae-model-v1";
+/**
+ * The weights live under whichever species is being asked for; see `species.ts`. Every
+ * entry point below therefore takes a `Species` rather than reading a module constant,
+ * and the caches, metas and ONNX sessions are keyed by species id so switching the
+ * toggle cannot serve one model's bytes under the other's settings.
+ */
+function partUrls(sp: Species): string[] {
+  return sp.modelParts > 1
+    ? Array.from({ length: sp.modelParts }, (_, i) => `${sp.modelUrl}.part${i}`)
+    : [sp.modelUrl];
+}
 
 export interface LoadProgress {
   /** Bytes received so far. */
@@ -152,11 +174,21 @@ export function onModelProgress(fn: ProgressFn | null) {
  * response is streamed so the UI can show real progress rather than a spinner
  * that sits still for minutes.
  */
-async function fetchModelBytes(): Promise<ArrayBuffer> {
+/**
+ * Fetch the graph, from the Cache API when it is already there.
+ *
+ * MULTI-PART. A graph may be stored as N consecutive byte-range parts rather than one
+ * object, because an unauthenticated PUT caps out well below 600 MB and multipart upload
+ * needs an access key pair this project does not hold. The split is byte-exact and
+ * order-dependent: part(i) is bytes [i*size, (i+1)*size). The parts are sized first, so
+ * the progress readout counts against the true total instead of restarting at every part
+ * boundary, and concatenated in order.
+ */
+async function fetchModelBytes(sp: Species): Promise<ArrayBuffer> {
   const caches_ = typeof caches !== "undefined" ? caches : null;
   if (caches_) {
-    const cache = await caches_.open(CACHE_NAME);
-    const hit = await cache.match(MODEL_URL);
+    const cache = await caches_.open(sp.cacheName);
+    const hit = await cache.match(sp.modelUrl);
     if (hit) {
       const buf = await hit.arrayBuffer();
       progressFn?.({ loaded: buf.byteLength, total: buf.byteLength, cached: true, done: true });
@@ -164,29 +196,41 @@ async function fetchModelBytes(): Promise<ArrayBuffer> {
     }
   }
 
-  const res = await fetch(MODEL_URL);
-  if (!res.ok) throw new Error(`model fetch failed: ${res.status}`);
-  const total = Number(res.headers.get("content-length") || 0);
-
-  // Tee the stream: one branch feeds the progress readout, the other is handed to
-  // the Cache API unread so the browser stores it without us buffering twice.
-  const reader = res.body?.getReader();
-  if (!reader) {
-    const buf = await res.arrayBuffer();
-    progressFn?.({ loaded: buf.byteLength, total: buf.byteLength, cached: false, done: true });
-    return buf;
+  const urls = partUrls(sp);
+  let total = 0;
+  if (urls.length > 1) {
+    const heads = await Promise.all(urls.map((u) => fetch(u, { method: "HEAD" })));
+    heads.forEach((h, i) => {
+      if (!h.ok) throw new Error(`model fetch failed: ${h.status} on part ${i}`);
+      total += Number(h.headers.get("content-length") || 0);
+    });
   }
+
   const chunks: Uint8Array[] = [];
   let loaded = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) {
-      chunks.push(value);
-      loaded += value.byteLength;
-      progressFn?.({ loaded, total, cached: false, done: false });
+  for (const url of urls) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`model fetch failed: ${res.status}`);
+    if (urls.length === 1) total = Number(res.headers.get("content-length") || 0);
+    const reader = res.body?.getReader();
+    if (!reader) {
+      const b = new Uint8Array(await res.arrayBuffer());
+      chunks.push(b);
+      loaded += b.byteLength;
+      progressFn?.({ loaded, total: total || loaded, cached: false, done: false });
+      continue;
+    }
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        loaded += value.byteLength;
+        progressFn?.({ loaded, total, cached: false, done: false });
+      }
     }
   }
+
   const bytes = new Uint8Array(loaded);
   let at = 0;
   for (const c of chunks) {
@@ -197,8 +241,10 @@ async function fetchModelBytes(): Promise<ArrayBuffer> {
 
   if (caches_) {
     try {
-      const cache = await caches_.open(CACHE_NAME);
-      await cache.put(MODEL_URL, new Response(bytes, {
+      const cache = await caches_.open(sp.cacheName);
+      // Stored under the base URL even when it arrived in parts: the parts are an
+      // upload detail, and the cache only needs to answer "these bytes, this model".
+      await cache.put(sp.modelUrl, new Response(bytes, {
         headers: { "content-type": "application/octet-stream" },
       }));
     } catch {
@@ -208,26 +254,26 @@ async function fetchModelBytes(): Promise<ArrayBuffer> {
   return bytes.buffer;
 }
 
-let metaPromise: Promise<{ meta: ModelMeta; hasModel: boolean }> | null = null;
-let sessionPromise: Promise<{
-  session: InferenceSession;
-  provider: string;
-} | null> | null = null;
+type Loaded = { session: InferenceSession; provider: string };
+
+const metaPromises = new Map<SpeciesId, Promise<{ meta: ModelMeta; hasModel: boolean }>>();
+const sessionPromises = new Map<SpeciesId, Promise<Loaded | null>>();
 
 /** Does a published model exist, and what are its bin settings? */
-export function loadMeta(): Promise<{ meta: ModelMeta; hasModel: boolean }> {
-  if (metaPromise) return metaPromise;
-  metaPromise = (async () => {
+export function loadMeta(sp: Species): Promise<{ meta: ModelMeta; hasModel: boolean }> {
+  const cached = metaPromises.get(sp.id);
+  if (cached) return cached;
+  const p = (async () => {
     try {
-      const res = await fetch(META_URL, { cache: "no-store" });
+      const res = await fetch(sp.metaUrl, { cache: "no-store" });
       if (!res.ok) return { meta: FALLBACK_META, hasModel: false };
       const raw = await res.json();
       const meta: ModelMeta = { ...FALLBACK_META, ...raw };
       // A meta file with no weights beside it is a broken deploy, not a model.
       // A cached copy counts: the weights may be huge and already local.
       if (typeof caches !== "undefined") {
-        const cache = await caches.open(CACHE_NAME);
-        if (await cache.match(MODEL_URL)) return { meta, hasModel: true };
+        const cache = await caches.open(sp.cacheName);
+        if (await cache.match(sp.modelUrl)) return { meta, hasModel: true };
       }
       // Probe cheaply. HEAD first; some hosts (and some CDN redirects) refuse it,
       // so fall back to a one-byte ranged GET, which costs nothing and exercises
@@ -245,6 +291,8 @@ export function loadMeta(): Promise<{ meta: ModelMeta; hasModel: boolean }> {
       //
       // The probe is one byte, so never caching it costs nothing. The 610 MB download
       // that follows still uses the cache, which is where caching actually matters.
+      // A split graph is probed on its first part; the base URL is not an object.
+      const probeUrl = partUrls(sp)[0];
       for (const init of [
         { method: "HEAD", cache: "no-store" } as RequestInit,
         {
@@ -254,7 +302,7 @@ export function loadMeta(): Promise<{ meta: ModelMeta; hasModel: boolean }> {
         } as RequestInit,
       ]) {
         try {
-          const r = await fetch(MODEL_URL, init);
+          const r = await fetch(probeUrl, init);
           if (r.ok || r.status === 206) return { meta, hasModel: true };
         } catch {
           // try the next probe
@@ -268,13 +316,15 @@ export function loadMeta(): Promise<{ meta: ModelMeta; hasModel: boolean }> {
       return { meta: FALLBACK_META, hasModel: false };
     }
   })();
-  return metaPromise;
+  metaPromises.set(sp.id, p);
+  return p;
 }
 
-async function getSession() {
-  if (sessionPromise) return sessionPromise;
-  sessionPromise = (async () => {
-    const { hasModel } = await loadMeta();
+async function getSession(sp: Species) {
+  const cached = sessionPromises.get(sp.id);
+  if (cached) return cached;
+  const p = (async () => {
+    const { hasModel } = await loadMeta(sp);
     if (!hasModel) return null;
     const ort = await import("onnxruntime-web");
     ort.env.wasm.numThreads =
@@ -289,7 +339,7 @@ async function getSession() {
         : ["wasm"];
     // Created from BYTES, not from the URL: that is what lets the Cache API serve
     // repeat visits and what makes the download progress observable at all.
-    const bytes = await fetchModelBytes();
+    const bytes = await fetchModelBytes(sp);
     try {
       const session = await ort.InferenceSession.create(bytes, {
         executionProviders: providers,
@@ -304,7 +354,8 @@ async function getSession() {
       return { session, provider: "wasm" };
     }
   })();
-  return sessionPromise;
+  sessionPromises.set(sp.id, p);
+  return p;
 }
 
 /**
@@ -312,15 +363,15 @@ async function getSession() {
  * the first run. In that case release its (large) GPU allocation before reading
  * the already-cached graph back and rebuilding with the portable WASM backend.
  */
-async function replaceWithWasmSession() {
+async function replaceWithWasmSession(sp: Species) {
   const ort = await import("onnxruntime-web");
-  const bytes = await fetchModelBytes();
+  const bytes = await fetchModelBytes(sp);
   const session = await ort.InferenceSession.create(bytes, {
     executionProviders: ["wasm"],
     graphOptimizationLevel: "all",
   });
   const loaded = { session, provider: "wasm" };
-  sessionPromise = Promise.resolve(loaded);
+  sessionPromises.set(sp.id, Promise.resolve(loaded));
   return loaded;
 }
 
@@ -345,10 +396,11 @@ let inferenceQueue: Promise<unknown> = Promise.resolve();
 export function runInference(
   tensor: Float32Array,
   meta: ModelMeta,
+  sp: Species,
 ): Promise<InferenceResult> {
   const run = inferenceQueue.then(
-    () => runInferenceUnqueued(tensor, meta),
-    () => runInferenceUnqueued(tensor, meta),
+    () => runInferenceUnqueued(tensor, meta, sp),
+    () => runInferenceUnqueued(tensor, meta, sp),
   );
   // The queue tracks completion, not success, so one rejected inference does not
   // permanently block the next.
@@ -359,9 +411,10 @@ export function runInference(
 async function runInferenceUnqueued(
   tensor: Float32Array,
   meta: ModelMeta,
+  sp: Species,
 ): Promise<InferenceResult> {
   const started = performance.now();
-  const loaded = await getSession();
+  const loaded = await getSession(sp);
 
   if (!loaded) {
     // NO SYNTHETIC FALLBACK. This used to fabricate a plausible posterior and label it
@@ -389,7 +442,7 @@ async function runInferenceUnqueued(
   } catch (error) {
     if (active.provider !== "webgpu") throw error;
     await active.session.release();
-    active = await replaceWithWasmSession();
+    active = await replaceWithWasmSession(sp);
     output = await active.session.run({
       [active.session.inputNames[0]]: input,
     });

@@ -41,9 +41,10 @@ export default function ExportReport({
               capturedAt={capturedAt}
               image={image}
               fileName={summary.fileName}
+              coverage={summary.coverage}
             />
           </div>
-          <MetricsGrid post={post} capturedAt={capturedAt} />
+          <MetricsGrid post={post} capturedAt={capturedAt} coverage={summary.coverage} />
         </section>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>

@@ -11,11 +11,13 @@ import PosteriorChart from "./PosteriorChart";
 import RawData from "./RawData";
 import ExportBar from "./ExportBar";
 import ImageThumb from "./ImageThumb";
+import SpeciesHeader from "./SpeciesHeader";
 import SaliencyGallery from "./SaliencyGallery";
 import SaliencyPanel from "./SaliencyPanel";
 import { decodePosterior, formatHours, addHours, type Posterior } from "../lib/decode";
 import { prepareImage, type PreparedImage } from "../lib/preprocess";
 import { abortAllSaliency } from "../lib/saliency";
+import { SPECIES, isSpeciesId, type SpeciesId } from "../lib/species";
 import {
   FALLBACK_META,
   loadMeta,
@@ -40,8 +42,22 @@ interface Analysis {
 }
 
 export default function Analyzer() {
-  const [meta, setMeta] = useState<ModelMeta>(FALLBACK_META);
-  const [hasModel, setHasModel] = useState<boolean | null>(null);
+  // The species is the page's top-level state: it chooses the weights, the metadata,
+  // and the explanation assets. It is NOT persisted across reloads beyond the URL --
+  // ?species=human deep-links to the human model so the old separate deployment's
+  // links can be redirected here, and switching rewrites that without a navigation.
+  const [speciesId, setSpeciesId] = useState<SpeciesId>("mouse");
+  const species = SPECIES[speciesId];
+  // Meta is stored WITH the species it was loaded for, and read back only when the two
+  // agree. That is what makes switching safe without a reset: until the new species'
+  // meta lands, `current` is null, so the page falls back to neutral settings and an
+  // unknown availability rather than briefly describing one model with the other's
+  // bin count and readout.
+  const [loaded, setLoaded] =
+    useState<{ sp: SpeciesId; meta: ModelMeta; hasModel: boolean } | null>(null);
+  const current = loaded && loaded.sp === speciesId ? loaded : null;
+  const meta = current?.meta ?? FALLBACK_META;
+  const hasModel = current ? current.hasModel : null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
@@ -49,11 +65,42 @@ export default function Analyzer() {
   const nextId = useRef(0);
 
   useEffect(() => {
-    loadMeta().then((r) => {
-      setMeta(r.meta);
-      setHasModel(r.hasModel);
-    });
+    // Read once, after mount, deliberately. A lazy useState initialiser reading
+    // window.location would render "human" on the client against the "mouse" this page
+    // is prerendered as, which is a hydration mismatch; correcting it in an effect is
+    // the supported way round that, and it runs exactly once.
+    const q = new URLSearchParams(window.location.search).get("species");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (isSpeciesId(q)) setSpeciesId(q);
   }, []);
+
+  useEffect(() => {
+    let live = true;
+    loadMeta(species).then((r) => {
+      // A switch while this was in flight must not apply the previous species' meta.
+      if (live) setLoaded({ sp: species.id, meta: r.meta, hasModel: r.hasModel });
+    });
+    return () => {
+      live = false;
+    };
+  }, [species]);
+
+  const switchSpecies = useCallback(
+    (next: SpeciesId) => {
+      if (next === speciesId) return;
+      // A result belongs to the model that produced it, so it cannot survive the
+      // switch; neither can a saliency run, which is queued against the old session.
+      abortAllSaliency();
+      setSpeciesId(next);
+      setAnalysis(null);
+      setError(null);
+      const url = new URL(window.location.href);
+      if (next === "mouse") url.searchParams.delete("species");
+      else url.searchParams.set("species", next);
+      window.history.replaceState(null, "", url);
+    },
+    [speciesId],
+  );
 
   const capturedAt = useMemo(() => {
     if (!capturedAtRaw) return null;
@@ -72,7 +119,7 @@ export default function Analyzer() {
       setError(null);
       try {
         const image = await prepareImage(file, meta.imageSize);
-        const result = await runInference(image.tensor, meta);
+        const result = await runInference(image.tensor, meta, species);
         // The published recipe collapses the posterior with a quantile fitted on
         // training folds, so that -- not the mean or the mode -- is the number every
         // reported MAE describes -- and every result reaching here is a real one.
@@ -80,7 +127,8 @@ export default function Analyzer() {
           result.source === "onnx" && meta.readout === "quantile" && meta.q != null
             ? meta.q
             : null;
-        const post = decodePosterior(result.logits, meta.rMin, meta.rMax, 0.8, q);
+        const post = decodePosterior(
+          result.logits, meta.rMin, meta.rMax, meta.intervalMass ?? 0.8, q);
         setAnalysis({
           id: ++nextId.current,
           fileName: file.name,
@@ -107,12 +155,13 @@ export default function Analyzer() {
         setBusy(false);
       }
     },
-    [meta],
+    [meta, species],
   );
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
-      {hasModel === false && <ModelUnavailableNotice />}
+      <SpeciesHeader speciesId={speciesId} onSwitch={switchSpecies} />
+      {hasModel === false && <ModelUnavailableNotice species={species.label} />}
 
       <section className="panel">
         <div className={`panel-pad split-grid${analysis ? "" : " single"}`}>
@@ -180,12 +229,19 @@ export default function Analyzer() {
                 capturedAt={capturedAt}
                 image={analysis.image}
                 fileName={analysis.fileName}
+                coverage={meta.intervalCoverage}
               />
             </div>
           )}
         </div>
 
-        {analysis && <MetricsGrid post={analysis.post} capturedAt={capturedAt} />}
+        {analysis && (
+          <MetricsGrid
+            post={analysis.post}
+            capturedAt={capturedAt}
+            coverage={meta.intervalCoverage}
+          />
+        )}
         {analysis && (
           <div
             className="panel-pad"
@@ -200,6 +256,7 @@ export default function Analyzer() {
                 ms: analysis.ms,
                 capturedAt,
                 recipe: meta.recipe,
+                coverage: meta.intervalCoverage,
               }}
             />
           </div>
@@ -248,6 +305,7 @@ export default function Analyzer() {
                   ? analysis.post.mode
                   : analysis.post.readout
               }
+              manifestUrl={species.explainUrl}
             />
             <details style={{ marginTop: 16 }}>
               <summary
@@ -263,18 +321,24 @@ export default function Analyzer() {
                   key={analysis.id}
                   image={analysis.image}
                   meta={meta}
+                  species={species}
                   enabled
                 />
               </div>
             </details>
           </Panel>
 
-          <Panel
-            title="What our corpus looks like at this time"
-            caption="Real embryos that were this far from dividing."
-          >
-            <CorpusStrip post={analysis.post} />
-          </Panel>
+          {/* Omitted, not emptied, for a species whose corpus frames are not published
+              with the site: a panel captioned "real embryos" with nothing under it reads
+              as a load failure. */}
+          {species.corpusUrl && (
+            <Panel
+              title="What our corpus looks like at this time"
+              caption="Real embryos that were this far from dividing."
+            >
+              <CorpusStrip post={analysis.post} manifestUrl={species.corpusUrl} />
+            </Panel>
+          )}
 
           <div
             style={{
@@ -321,11 +385,14 @@ export function Headline({
   capturedAt,
   image,
   fileName,
+  coverage,
 }: {
   analysis: Pick<Analysis, "post" | "provider" | "ms">;
   capturedAt: Date | null;
   image?: PreparedImage;
   fileName?: string;
+  /** Measured out-of-fold coverage; the raw probability mass is not it. */
+  coverage?: number;
 }) {
   const { post } = analysis;
   return (
@@ -402,7 +469,7 @@ export function Headline({
         }}
       >
         <div className="metric-label" style={{ marginBottom: 5 }}>
-          {Math.round(post.mass * 100)}% interval
+          {Math.round((coverage ?? post.mass) * 100)}% interval
         </div>
         <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em" }}>
           {formatHours(post.lo)} — {formatHours(post.hi)}
@@ -505,7 +572,7 @@ function BimodalWarning({ post }: { post: Posterior }) {
  * obvious. Danger colour, not warning colour, and the upload path is closed behind it:
  * there is nothing useful to do until the weights load.
  */
-function ModelUnavailableNotice() {
+function ModelUnavailableNotice({ species }: { species: string }) {
   return (
     <div
       className="panel"
@@ -531,7 +598,8 @@ function ModelUnavailableNotice() {
               marginBottom: 4,
             }}
           >
-            The model is unavailable — this page cannot make a prediction right now
+            The {species.toLowerCase()} model is unavailable — this page cannot make a
+            prediction right now
           </div>
           <p
             style={{

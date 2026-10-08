@@ -1,5 +1,6 @@
 import { decodePosterior } from "./decode";
 import { runInference, type ModelMeta } from "./infer";
+import type { Species } from "./species";
 
 /**
  * Occlusion saliency, computed in the browser against the SAME graph that made the
@@ -109,6 +110,7 @@ export function abortAllSaliency() {
 export async function occlusionMap(
   tensor: Float32Array,
   meta: ModelMeta,
+  sp: Species,
   onProgress?: (done: number, total: number) => void,
   controller?: AbortController,
   onPlan?: (plan: SaliencyPlan) => void,
@@ -121,7 +123,7 @@ export async function occlusionMap(
   if (controller) inFlight.add(controller);
   const stopped = () => controller?.signal.aborted ?? false;
   try {
-    return await measure(tensor, meta, onProgress, onPlan, stopped);
+    return await measure(tensor, meta, sp, onProgress, onPlan, stopped);
   } finally {
     if (controller) inFlight.delete(controller);
   }
@@ -130,6 +132,7 @@ export async function occlusionMap(
 async function measure(
   tensor: Float32Array,
   meta: ModelMeta,
+  sp: Species,
   onProgress: ((done: number, total: number) => void) | undefined,
   onPlan: ((plan: SaliencyPlan) => void) | undefined,
   stopped: () => boolean,
@@ -138,7 +141,7 @@ async function measure(
   const size = meta.imageSize;
   const fill = meanOf(tensor);
 
-  const first = await runInference(tensor, meta);
+  const first = await runInference(tensor, meta, sp);
   // Defensive: runInference now throws rather than returning a synthetic result, so this
   // cannot fire. Left as a hard stop against a future fallback being added back, because
   // measuring a fabricated prediction would produce a heatmap of nothing that looked
@@ -152,7 +155,7 @@ async function measure(
   // arriving, and the first pass through a fresh session pays warm-up the rest do not.
   const probeGrid = GRID_CHOICES[GRID_CHOICES.length - 1];
   const tProbe = performance.now();
-  await runInference(maskCell(tensor, size, probeGrid, 0, 0, fill), meta);
+  await runInference(maskCell(tensor, size, probeGrid, 0, 0, fill), meta, sp);
   const secondsPerCell = (performance.now() - tProbe) / 1000;
   if (stopped()) return null;
 
@@ -166,7 +169,7 @@ async function measure(
   for (let gy = 0; gy < grid; gy++) {
     for (let gx = 0; gx < grid; gx++) {
       if (stopped()) return null;
-      const r = await runInference(maskCell(tensor, size, grid, gy, gx, fill), meta);
+      const r = await runInference(maskCell(tensor, size, grid, gy, gx, fill), meta, sp);
       const shift = Math.abs(readout(r.logits, meta) - base);
       map[gy * grid + gx] = shift;
       if (shift > maxShift) maxShift = shift;

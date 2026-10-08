@@ -24,16 +24,35 @@ interface Entry {
   src: string;
   trueHours: number;
   predHours: number;
-  grid: number;
-  maxShiftHours: number;
-  map: number[];
+  /** Occlusion entries only. A pre-rendered entry carries the picture, not the numbers. */
+  grid?: number;
+  maxShiftHours?: number;
+  map?: number[];
+  embryo?: string;
 }
 
 interface Manifest {
   method: string;
+  /**
+   * "composite" -- the entry carries a numeric map on a grid, and the three panes are
+   * drawn here from those numbers. "prerendered" -- the entry is a finished image.
+   *
+   * The two exist because the measurements are not the same measurement. The mouse map
+   * is occlusion: blank a patch, re-run, record how far the answer moved; that is a
+   * forward pass per patch and it yields NUMBERS, so the page can composite the frame,
+   * the heatmap and a top-N mask from one array. The human map is gradient saliency,
+   * which needs a backward pass -- onnxruntime-web has no autograd, and nothing can
+   * recover the array from a rendered PNG. So those arrive as finished images.
+   *
+   * Both are shown in the same panel, with the same stepper and scrubber. What differs
+   * is what is honestly available, and the caption says which method produced it.
+   */
+  render?: "composite" | "prerendered";
   verdict: string;
-  winsInsertion: string;
-  winsDeletion: string;
+  winsInsertion?: string;
+  winsDeletion?: string;
+  occlusionRho?: number;
+  attentionRho?: number;
   protocol: string;
   n: number;
   entries: Entry[];
@@ -41,21 +60,31 @@ interface Manifest {
 
 const KEEP = 0.35;
 
-export default function SaliencyGallery({ hours }: { hours: number }) {
-  const [mf, setMf] = useState<Manifest | null>(null);
+export default function SaliencyGallery({
+  hours,
+  manifestUrl,
+}: {
+  hours: number;
+  manifestUrl: string;
+}) {
+  // Stored with the URL it came from. Reading it back only when the two agree means a
+  // species switch shows nothing rather than the previous model's maps, without an
+  // effect that resets state and re-renders.
+  const [fetched, setFetched] = useState<{ url: string; mf: Manifest } | null>(null);
+  const mf = fetched && fetched.url === manifestUrl ? fetched.mf : null;
   const [idx, setIdx] = useState<number | null>(null);
   const canvases = useRef<(HTMLCanvasElement | null)[]>([null, null, null]);
 
   useEffect(() => {
     let live = true;
-    fetch("/saliency/manifest.json")
+    fetch(manifestUrl)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((m: Manifest) => live && setMf(m))
+      .then((m: Manifest) => live && setFetched({ url: manifestUrl, mf: m }))
       .catch(() => undefined);
     return () => {
       live = false;
     };
-  }, []);
+  }, [manifestUrl]);
 
   // The entry nearest the predicted stage. Recomputed when the prediction changes, but
   // only used as the STARTING point -- once the reader navigates, their choice stands.
@@ -69,11 +98,21 @@ export default function SaliencyGallery({ hours }: { hours: number }) {
     return best;
   }, [mf, hours]);
 
-  const active = idx ?? nearest;
+  // Clamped: a manually chosen index belongs to the manifest it was chosen in, and the
+  // two galleries are different lengths, so an un-clamped carry-over would index past
+  // the end and render nothing at all.
+  const active = Math.min(idx ?? nearest, Math.max(0, (mf?.entries.length ?? 1) - 1));
   const entry = mf?.entries[active];
+  const composite = (mf?.render ?? "composite") === "composite";
+  // The manifest's own directory is the asset root: /saliency/manifest.json puts the
+  // frames in /saliency/img/, /explain/manifest.json puts them beside the manifest.
+  const base = manifestUrl.slice(0, manifestUrl.lastIndexOf("/") + 1);
+  const imgSrc = entry ? `${base}${composite ? "img/" : ""}${entry.src}` : "";
 
   useEffect(() => {
-    if (!entry) return;
+    if (!entry || !composite || !entry.map || !entry.grid) return;
+    const grid = entry.grid;
+    const rawMap = entry.map;
     let cancelled = false;
     const img = new Image();
     img.onload = () => {
@@ -87,8 +126,8 @@ export default function SaliencyGallery({ hours }: { hours: number }) {
       octx.drawImage(img, 0, 0);
       const px = octx.getImageData(0, 0, size, size).data;
 
-      const map = Float32Array.from(entry.map);
-      const smooth = upsample(map, size, entry.grid);
+      const map = Float32Array.from(rawMap);
+      const smooth = upsample(map, size, grid);
       // Threshold on the COARSE map so panel (c) shows exactly the patches that were
       // measured, not a prettier contour drawn around patches that never were.
       const sorted = Array.from(map).sort((a, b) => b - a);
@@ -112,11 +151,11 @@ export default function SaliencyGallery({ hours }: { hours: number }) {
             gg = Math.round(g * (1 - a) + jg * a);
             b = Math.round(g * (1 - a) + jb * a);
           } else if (panel === 2) {
-            const gy = Math.min(entry.grid - 1,
-              Math.floor((Math.floor(i / size) / size) * entry.grid));
-            const gx = Math.min(entry.grid - 1,
-              Math.floor(((i % size) / size) * entry.grid));
-            if (map[gy * entry.grid + gx] < thr) { r = gg = b = 0; }
+            const gy = Math.min(grid - 1,
+              Math.floor((Math.floor(i / size) / size) * grid));
+            const gx = Math.min(grid - 1,
+              Math.floor(((i % size) / size) * grid));
+            if (map[gy * grid + gx] < thr) { r = gg = b = 0; }
           }
           out.data[i * 4] = r;
           out.data[i * 4 + 1] = gg;
@@ -126,9 +165,9 @@ export default function SaliencyGallery({ hours }: { hours: number }) {
         ctx.putImageData(out, 0, 0);
       }
     };
-    img.src = `/saliency/img/${entry.src}`;
+    img.src = imgSrc;
     return () => { cancelled = true; };
-  }, [entry]);
+  }, [entry, composite, imgSrc]);
 
   if (!mf || !entry) return null;
 
@@ -177,34 +216,46 @@ export default function SaliencyGallery({ hours }: { hours: number }) {
         style={{ width: "100%" }}
       />
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 96px), 1fr))",
-          gap: 12,
-        }}
-      >
-        {titles.map((t, i) => (
-          <figure key={t} style={{ margin: 0 }}>
-            <figcaption
-              style={{
-                fontSize: 11.5, fontWeight: 750, color: "var(--ink)",
-                marginBottom: 6, letterSpacing: "-0.01em",
-              }}
-            >
-              {t}
-            </figcaption>
-            <canvas
-              ref={(el) => { canvases.current[i] = el; }}
-              style={{
-                width: "100%", height: "auto", aspectRatio: "1 / 1", display: "block",
-                borderRadius: 10, border: "1px solid var(--border-soft)",
-                background: "var(--surface)",
-              }}
-            />
-          </figure>
-        ))}
-      </div>
+      {composite ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 96px), 1fr))",
+            gap: 12,
+          }}
+        >
+          {titles.map((t, i) => (
+            <figure key={t} style={{ margin: 0 }}>
+              <figcaption
+                style={{
+                  fontSize: 11.5, fontWeight: 750, color: "var(--ink)",
+                  marginBottom: 6, letterSpacing: "-0.01em",
+                }}
+              >
+                {t}
+              </figcaption>
+              <canvas
+                ref={(el) => { canvases.current[i] = el; }}
+                style={{
+                  width: "100%", height: "auto", aspectRatio: "1 / 1", display: "block",
+                  borderRadius: 10, border: "1px solid var(--border-soft)",
+                  background: "var(--surface)",
+                }}
+              />
+            </figure>
+          ))}
+        </div>
+      ) : (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={imgSrc}
+          alt={`Gradient saliency map for a zygote ${formatHours(entry.trueHours)} before its first cleavage`}
+          style={{
+            width: "100%", height: "auto", display: "block", borderRadius: 10,
+            border: "1px solid var(--border-soft)", background: "var(--surface)",
+          }}
+        />
+      )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--accent-soft)" }}>
@@ -221,9 +272,12 @@ export default function SaliencyGallery({ hours }: { hours: number }) {
         <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--accent-soft)" }}>
           most used
         </span>
-        <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
-          blanking the hottest patch moved the answer {entry.maxShiftHours.toFixed(2)} h
-        </span>
+        {entry.maxShiftHours != null && (
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+            blanking the hottest patch moved the answer{" "}
+            {entry.maxShiftHours.toFixed(2)} h
+          </span>
+        )}
       </div>
 
       <p
@@ -233,8 +287,21 @@ export default function SaliencyGallery({ hours }: { hours: number }) {
         }}
       >
         <strong>This is not a map of your image.</strong> It is a held-out corpus embryo
-        at the stage just predicted for you, measured by blanking each patch and
-        re-running the model. It beats randomly ordered patches on {mf.winsInsertion}.
+        at the stage just predicted for you.{" "}
+        {composite ? (
+          <>
+            Measured by blanking each patch and re-running the model. It beats randomly
+            ordered patches on {mf.winsInsertion}.
+          </>
+        ) : (
+          <>
+            Measured as the gradient of the predicted hours with respect to each patch,
+            rendered offline — a backward pass has no browser equivalent, so it cannot be
+            computed for an uploaded image. Against occlusion it scores{" "}
+            {mf.occlusionRho?.toFixed(2)}, where the backbone&rsquo;s own attention
+            reaches only {mf.attentionRho?.toFixed(2)}.
+          </>
+        )}
       </p>
     </div>
   );

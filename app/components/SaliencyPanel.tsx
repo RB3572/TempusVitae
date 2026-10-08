@@ -11,6 +11,7 @@ import {
 } from "../lib/saliency";
 import type { ModelMeta } from "../lib/infer";
 import type { PreparedImage } from "../lib/preprocess";
+import type { Species } from "../lib/species";
 
 /**
  * The three-panel explanation: what the model saw, where it looked, and what is left
@@ -28,10 +29,12 @@ const KEEP = 0.35;   // fraction of the map kept in panel (c)
 export default function SaliencyPanel({
   image,
   meta,
+  species,
   enabled,
 }: {
   image: PreparedImage;
   meta: ModelMeta;
+  species: Species;
   enabled: boolean;
 }) {
   const [result, setResult] = useState<SaliencyResult | null>(null);
@@ -68,6 +71,7 @@ export default function SaliencyPanel({
       const r = await occlusionMap(
         image.tensor,
         meta,
+        species,
         (d, t) => { setDone(d); setTotal(t); },
         ac,
         (pl) => setPlan(pl),
@@ -83,7 +87,7 @@ export default function SaliencyPanel({
     } finally {
       if (!ac.signal.aborted) setBusy(false);
     }
-  }, [image, meta]);
+  }, [image, meta, species]);
 
   useEffect(() => () => abort.current?.abort(), []);
 

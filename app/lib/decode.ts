@@ -43,7 +43,8 @@ export interface Posterior {
   /** Entropy as a fraction of the maximum possible (log n), 0..1. */
   entropyNorm: number;
   /**
-   * The canonical predict.py flag: (hi - lo) > 3.2 * sd. Reported verbatim so
+   * The canonical predict.py flag: (hi - lo) > 3.2 * sd, always evaluated on the
+   * 80%-mass span regardless of the mass the page draws. Reported verbatim so
    * exports from this page agree with the CLI.
    *
    * Be aware it is a weak detector of the thing it is named for. A clean
@@ -240,6 +241,15 @@ export function decodePosterior(
     strongPeaks.push(p);
   }
 
+  // THE SPREAD FLAG MUST NOT MOVE WITH THE DISPLAY MASS.
+  // `bimodal` is the canonical predict.py rule, (hi - lo) > 3.2 * sd, and its 3.2 was
+  // chosen against an 80%-mass span. A calibrated model draws its displayed span at a
+  // much higher mass -- 0.9999 on the human head -- which widens hi - lo for every
+  // posterior, so reusing it here would fire the flag on almost everything and the
+  // warning would stop meaning anything. Computed at a fixed 0.8 so the flag keeps its
+  // calibration and stays in step with the CLI, whatever mass the page happens to draw.
+  const flagSpan = mass === 0.8 ? { lo, hi } : narrowestInterval(probs, centres, 0.8);
+
   return {
     probs,
     centres,
@@ -256,7 +266,7 @@ export function decodePosterior(
     readoutQ: q,
     entropy,
     entropyNorm: entropy / Math.log(n),
-    bimodal: hi - lo > 3.2 * sd,
+    bimodal: flagSpan.hi - flagSpan.lo > 3.2 * sd,
     multimodal: strongPeaks.length > 1,
     peaks,
     strongPeaks,

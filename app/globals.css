@@ -360,7 +360,8 @@ h1.page-title {
   gap: 2px;
 }
 .seg > a,
-.seg > span {
+.seg > span,
+.seg > button {
   display: inline-flex;
   align-items: center;
   padding: 6px 14px;
@@ -372,7 +373,15 @@ h1.page-title {
   text-decoration: none;
   transition: background 0.18s var(--ease), color 0.18s var(--ease);
 }
-.seg > a:hover {
+.seg > button {
+  background: none;
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.seg > a:hover,
+.seg > button:not(.seg-on):hover {
   background: var(--surface-hover);
   color: var(--ink);
 }
@@ -391,7 +400,8 @@ h1.page-title {
     padding: 11px 16px;
   }
   .seg > a,
-  .seg > span {
+  .seg > span,
+  .seg > button {
     min-height: 38px;
   }
 }

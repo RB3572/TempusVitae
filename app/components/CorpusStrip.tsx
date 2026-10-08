@@ -83,20 +83,28 @@ function nearest(entries: Entry[], hours: number): Entry[] {
   return byDistance.slice(0, SHOWN).sort((a, b) => a.t - b.t);
 }
 
-export default function CorpusStrip({ post }: { post: Posterior }) {
+export default function CorpusStrip({
+  post,
+  manifestUrl,
+}: {
+  post: Posterior;
+  manifestUrl: string;
+}) {
+  // Frames sit in img/ beside their manifest, so a second corpus needs no new prop.
+  const base = manifestUrl.slice(0, manifestUrl.lastIndexOf("/") + 1);
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let live = true;
-    fetch("/corpus/manifest.json")
+    fetch(manifestUrl)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((m: Manifest) => live && setManifest(m))
       .catch(() => live && setFailed(true));
     return () => {
       live = false;
     };
-  }, []);
+  }, [manifestUrl]);
 
   // One row per strong peak when the posterior has several, otherwise one row at the
   // number the page puts in the headline.
@@ -182,7 +190,7 @@ export default function CorpusStrip({ post }: { post: Posterior }) {
                       panel is already in view the moment a result appears. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`/corpus/img/${e.src}`}
+                    src={`${base}img/${e.src}`}
                     alt={`A mouse zygote ${formatHours(e.t)} before its first cleavage`}
                     width={manifest.tile}
                     height={manifest.tile}

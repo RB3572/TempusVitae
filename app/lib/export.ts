@@ -37,6 +37,8 @@ export interface ExportSummary {
   ms: number;
   capturedAt: Date | null;
   recipe?: string;
+  /** Measured out-of-fold coverage of the drawn interval, where it is calibrated. */
+  coverage?: number;
 }
 
 /** The subset of HTMLCanvasElement the PDF builder needs. Lets it be tested without a DOM. */
@@ -189,7 +191,8 @@ export async function buildPdf(canvas: RasterLike, summary: ExportSummary): Prom
   doc.setTextColor(63, 63, 63);
   const lines = [
     `${readoutLabel}  ·  ${formatHours(readout)}${when ? `  ·  expected ${when}` : ""}`,
-    `${Math.round(post.mass * 100)}% interval ${formatHours(post.lo)} — ${formatHours(post.hi)}` +
+    `${Math.round((summary.coverage ?? post.mass) * 100)}% interval ` +
+      `${formatHours(post.lo)} — ${formatHours(post.hi)}` +
       `  (${(post.hi - post.lo).toFixed(1)} h wide)  ·  sd ${post.sd.toFixed(2)} h`,
     `mode ${formatHours(post.mode)}  ·  mean ${formatHours(post.mean)}  ·  median ${formatHours(post.median)}` +
       `  ·  ${post.strongPeaks.length} distinct peak${post.strongPeaks.length === 1 ? "" : "s"}`,

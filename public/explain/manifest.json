@@ -1,0 +1,72 @@
+{
+ "method": "gradient",
+ "render": "prerendered",
+ "verdict": "FAITHFUL",
+ "occlusionRho": 0.46,
+ "attentionRho": 0.19,
+ "protocol": "gradient saliency: the derivative of the predicted hours with respect to each image patch, rendered offline by training/attention_map.py on the deployed 3-seed bundle. A backward pass has no browser equivalent, so these cannot be measured live.",
+ "frames": "held-out corpus frames",
+ "n": 10,
+ "entries": [
+  {
+   "src": "00_LK523-2_f66_gradient.png",
+   "embryo": "LK523-2",
+   "trueHours": 0.1,
+   "predHours": 0.68
+  },
+  {
+   "src": "01_GSS052-6_f84_gradient.png",
+   "embryo": "GSS052-6",
+   "trueHours": 3.0,
+   "predHours": 2.93
+  },
+  {
+   "src": "02_HE444-4_f67_gradient.png",
+   "embryo": "HE444-4",
+   "trueHours": 5.8,
+   "predHours": 5.71
+  },
+  {
+   "src": "03_LK584-2_f96_gradient.png",
+   "embryo": "LK584-2",
+   "trueHours": 8.8,
+   "predHours": 8.37
+  },
+  {
+   "src": "04_LL854-1_f53_gradient.png",
+   "embryo": "LL854-1",
+   "trueHours": 11.7,
+   "predHours": 11.58
+  },
+  {
+   "src": "05_LC161-2-5_f44_gradient.png",
+   "embryo": "LC161-2-5",
+   "trueHours": 14.6,
+   "predHours": 14.72
+  },
+  {
+   "src": "06_VF269-7_f34_gradient.png",
+   "embryo": "VF269-7",
+   "trueHours": 17.6,
+   "predHours": 17.63
+  },
+  {
+   "src": "07_RI273-6_f6_gradient.png",
+   "embryo": "RI273-6",
+   "trueHours": 20.6,
+   "predHours": 21.52
+  },
+  {
+   "src": "08_GSS052-2_f5_gradient.png",
+   "embryo": "GSS052-2",
+   "trueHours": 23.9,
+   "predHours": 23.62
+  },
+  {
+   "src": "09_RM855-3_f1_gradient.png",
+   "embryo": "RM855-3",
+   "trueHours": 41.5,
+   "predHours": 40.99
+  }
+ ]
+}
