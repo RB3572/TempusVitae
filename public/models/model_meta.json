@@ -4,7 +4,7 @@
   "nBins": 48,
   "imageSize": 224,
   "backbone": "vit_large_patch14_dinov2.lvd142m",
-  "recipe": "frozen DINOv2 ViT-L/14 + temporal SSL, TTA-8, 3-seed head",
+  "recipe": "frozen DINOv2 ViT-L/14 + temporal SSL, TTA-8, 3-seed head, trained on all 26 DIC imaging sessions plus the Wang bright-field cohort",
   "readout": "quantile",
   "q": 0.48,
   "sigmaHours": 1.0,
@@ -14,14 +14,113 @@
   "unit": "hours; REBASED (measured per-embryo frame interval, plan 13.2-RELABEL)",
   "precision": "fp16 weights, fp32 activations",
   "bytes": 610438713,
-  "exportedAt": "2026-08-21T08:36:46Z",
-  "valMae": 1.4844640493392944,
-  "valProtocol": "17-fold LOSO",
-  "vaultMae": 1.3595296144485474,
-  "externalMae": 1.2692223771236326,
-  "externalRhoWithin": 0.70903117745223,
-  "baseline": 2.715780056560385,
+  "exportedAt": "2026-09-24T09:58:34Z",
+  "baseline": 2.7185,
   "shrunkBy": "initializers-only",
-  "parityMaxBinDelta": 0.000119,
-  "parityHoursDelta": 0.0035
+  "parityMaxBinDelta": 0.00011876970529556274,
+  "parityHoursDelta": 0.003314426358883793,
+  "evalStandard": "26-fold leave-one-session-out as of 2026-08-28: train on 25 sessions, test on the 26th, rotating over all of them",
+  "notAdopted": {
+    "448px_input": {
+      "loso": 1.345,
+      "sealed_sessions": 1.491,
+      "withdrawn": "2026-08-28",
+      "reason": "the cross-validated gain did not survive evaluation on sessions the self-supervised stage had never seen"
+    },
+    "448px_12000step": {
+      "loso": 1.139,
+      "sealed_sessions": 1.507,
+      "withdrawn": "2026-08-28",
+      "reason": "same, and larger: a 0.37 h gap between the two protocols is the memorisation measured directly"
+    },
+    "composed_readout": {
+      "pooled_26fold": 1.377,
+      "on_familiar_sessions": 1.339,
+      "on_novel_sessions": 1.437,
+      "rejected": "2026-08-29",
+      "reason": "A nearest-neighbour blend that gains 0.148 h on sessions the trunk was pretrained on but LOSES 0.037 h on sessions it never saw. Every real submission is a novel session, so this would have improved the headline while making the product worse."
+    }
+  },
+  "previousExport": {
+    "valMae": 1.4844640493392944,
+    "valProtocol": "17-fold LOSO (superseded; see evalStandard)",
+    "vaultMae": 1.3595296144485474,
+    "externalMae": 1.2692223771236326,
+    "externalRhoWithin": 0.70903117745223,
+    "sealedSessionsMae": 1.51,
+    "sealedSessionsNote": "scored on the nine sessions that no stage of this model's training has ever seen, head trained on the other seventeen. This is the figure to quote for genuinely unseen data; the cross-validation figure is optimistic because the self-supervised stage saw every session in its pool.",
+    "valMae26Fold": 1.465,
+    "valMae26FoldReadout": "quantile (h1) -- the readout this exported model uses",
+    "valMae26FoldNote": "26-fold leave-one-session-out, train on 25 sessions test on the 26th, 3 seeds. The readout this exported model uses.",
+    "valMae26FoldSd": 0.002,
+    "pretextExposureCheck": {
+      "folds_pretext_had_seen": 1.484,
+      "folds_pretext_never_saw": 1.404,
+      "gap": -0.08,
+      "seeds": 3,
+      "reading": "NEGATIVE gap, replicated across three seeds: the model does BETTER on sessions its self-supervised stage never saw. That is the opposite of memorisation, so the headline is not inflated the way the withdrawn 448 px arm was. Reported on every evaluation, because a POSITIVE gap is what killed that arm."
+    },
+    "expectedMaeOnNewSession": 1.404,
+    "expectedMaeOnNewSessionSd": 0.005,
+    "expectedMaeOnNewSessionNote": "THE FIGURE TO QUOTE for a real user's image. Scored only on the nine sessions that no stage of training -- supervised or self-supervised -- has ever seen, with the head trained on the other 25. Every image submitted to this site comes from a session the model has never seen, so this is the honest expectation. It replaces the earlier 1.510 h figure, which was measured with the head trained on 17 sessions rather than 25.",
+    "loso26Mae": 1.4465,
+    "loso26Note": "26-fold leave-one-session-out over all sessions, this recipe (sigma=1.0, 3-seed head), scored per embryo. Source: analysis/pred26_champ_seed{0,1,2}.npz key 'h1'. NOTE: that evaluation fits the readout quantile per fold on training posteriors; this bundle ships the fixed q=0.48 it averages to, so the deployed readout is a simplification of the evaluated one.",
+    "externalBrightfield": {
+      "cohort": "Wang F, Hao S, Park K et al., Commun Biol 8:612 (2025), doi 10.1038/s42003-025-08044-5 -- 40 embryos, 1,527 pre-cleavage frames, 4 batches, bright field, 10-min interval",
+      "zeroShotMae": 2.167,
+      "zeroShotSlope": -0.008,
+      "cohortMedianGuess": 1.644,
+      "verdict": "COLD TRANSFER FAILS. On bright field, with no exposure to it, this model is worse than guessing that cohort's median and its predictions are almost flat against the truth. Not a cropping artifact: the authors' own framing gives 2.166. Accuracy claims here apply to DIC.",
+      "withBrightfieldSessions": {
+        "0": 2.18,
+        "1": 1.706,
+        "2": 1.492,
+        "3": 1.436
+      },
+      "withBrightfieldNote": "MAE on a held-out bright-field session as the head is given more bright-field sessions. One is not enough to beat the median; two is.",
+      "measuredAt": "2026-09-04"
+    },
+    "shippedModelIs": "the 224 px champion described above -- the withdrawn arms were never exported and nothing here changed as a result of them",
+    "appliedTo": "the export of 2026-08-21, whose head trained on the seventeen non-vault sessions. Retained for provenance; none of it measures the model now shipped."
+  },
+  "trainedOn": {
+    "dicSessions": 26,
+    "brightfieldSessions": 4,
+    "frames": 123846,
+    "embryos": 1443,
+    "bundle": "cache/final_model_26dic_wang.pt"
+  },
+  "includedSealedSessions": true,
+  "includedSealedSessionsNote": "This head trained on the three sealed sessions, so NO number measured on them describes this artifact. The accuracy below was measured on a matched head, same recipe and same pool minus those three sessions, which is the closest available estimate. Exported with export_champion.py --allow-sealed, a deliberate override of the guard that normally refuses a vault-trained head for a public demo.",
+  "valMae": 1.304,
+  "valProtocol": "single fit, no cross-validation; per-embryo MAE on the three sealed sessions (56 embryos), measured on the matched head that held them out. Individual seeds 1.304 / 1.302 / 1.334.",
+  "baselineNote": "guessing the training median, on those same 56 embryos",
+  "mae95Range": [
+    0.42,
+    2.994
+  ],
+  "mae95RangeNote": "2.5th to 97.5th percentile of the per-embryo absolute error",
+  "biologicalFloor": 0.618,
+  "biologicalFloorNote": "not a literature value: the mean spread in true cleavage time among each frame's five nearest neighbours in this model's feature space. Biased upward, and k-dependent (0.95 h at k=25).",
+  "parityNote": "fp16 conversion is accepted only if the decoded hours move by less than 0.01 h; the fuse-then-fp16 strategy was rejected at 0.562 h.",
+  "sha256": "667e7a5b5644e291d0ff4d61f81074484944a019e8f4f90e585f0ab0493ebaf9",
+  "parts": 3,
+  "partsNote": "Stored as 3 consecutive byte-range parts because wrangler refuses objects over 300 MiB. Concatenating part0..part2 in order reproduces cleavage.onnx exactly. VERIFY BY HASH, NOT BY SIZE: the August graph and this one are both exactly 610,438,713 bytes, because the initializers-only fp16 pass rewrites weights without changing graph structure. A partial swap would assemble to the correct total length and load without error.",
+  "partDigests": [
+    {
+      "name": "cleavage.onnx.part0",
+      "bytes": 203479571,
+      "sha256": "169974506f250ade5515eabdade3d6048b26b651e90386fabe2cd14bc36cdbdc"
+    },
+    {
+      "name": "cleavage.onnx.part1",
+      "bytes": 203479571,
+      "sha256": "5373e63181a0ee37ae5a3ecfca5c67de2d178f904fe9bc9cf9362a9080e1e716"
+    },
+    {
+      "name": "cleavage.onnx.part2",
+      "bytes": 203479571,
+      "sha256": "d80126afd1c4209ea69d9b5e4d26152ddd9a8c96dc6c0e54b3810e536c6d5676"
+    }
+  ]
 }

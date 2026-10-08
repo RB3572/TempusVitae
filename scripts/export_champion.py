@@ -123,6 +123,11 @@ def main() -> int:
     ap.add_argument("--weights", type=Path, default=None,
                     help="trunk weights; defaults to the path recorded in the bundle, "
                          "resolved relative to the bundle's own folder")
+    ap.add_argument("--allow-sealed", action="store_true", dest="allow_sealed",
+                    help="export a bundle whose head trained on the sealed sessions. "
+                         "Deliberate override of the public-demo guard; the exported "
+                         "metadata must then attribute any vault-derived accuracy to "
+                         "the separate head it was actually measured on.")
     ap.add_argument("--precision", choices=["fp16", "fp32"], default="fp16")
     ap.add_argument("--opset", type=int, default=17)
     ap.add_argument("--skip-parity", action="store_true", dest="skip_parity")
@@ -148,11 +153,20 @@ def main() -> int:
     print(f"  unit:   {b['unit']}")
     print(f"  trunk:  {b['backbone']}  views {b['tta_views']}  "
           f"readout {b['readout']} q={b.get('q')}")
-    if b.get("included_sealed_sessions"):
+    if b.get("included_sealed_sessions") and not args.allow_sealed:
         print("  REFUSING: this bundle's head saw the sealed sessions. A public demo "
               "must\n  not ship a model trained on the vault -- re-export without "
-              "--include-test.")
+              "--include-test,\n  or pass --allow-sealed if that is a deliberate "
+              "decision.")
         return 1
+    if b.get("included_sealed_sessions"):
+        # Deliberate override, recorded rather than removed. The consequence is precise:
+        # no vault-derived number describes THIS artifact, because this head trained on
+        # those embryos. Any accuracy shipped beside it must name the separate, matched
+        # head that held them out.
+        print("  --allow-sealed: shipping a head that TRAINED ON the sealed sessions.")
+        print("  No vault-derived accuracy measures this artifact; model_meta.json must")
+        print("  attribute any such figure to the matched head that held them out.")
 
     # Older bundles predate the `size` field; every one of them was built at 224,
     # which is also the only size the cached images and the trunk were ever used at.

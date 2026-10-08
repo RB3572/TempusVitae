@@ -9,9 +9,10 @@ import InputPreview from "./InputPreview";
 import MetricsGrid from "./MetricsGrid";
 import PosteriorChart from "./PosteriorChart";
 import RawData from "./RawData";
+import ExportBar from "./ExportBar";
+import ImageThumb from "./ImageThumb";
 import SaliencyGallery from "./SaliencyGallery";
 import SaliencyPanel from "./SaliencyPanel";
-import Timeline from "./Timeline";
 import { decodePosterior, formatHours, addHours, type Posterior } from "../lib/decode";
 import { prepareImage, type PreparedImage } from "../lib/preprocess";
 import { abortAllSaliency } from "../lib/saliency";
@@ -161,7 +162,7 @@ export default function Analyzer() {
                 color: "#a8a8a3",
               }}
             >
-              Optional. Sets the zero point so the timeline reads in clock time.
+              Optional — adds a clock time to the prediction.
             </p>
 
             {error && (
@@ -174,12 +175,35 @@ export default function Analyzer() {
 
           {analysis && (
             <div className="rise">
-              <Headline analysis={analysis} capturedAt={capturedAt} />
+              <Headline
+                analysis={analysis}
+                capturedAt={capturedAt}
+                image={analysis.image}
+                fileName={analysis.fileName}
+              />
             </div>
           )}
         </div>
 
         {analysis && <MetricsGrid post={analysis.post} capturedAt={capturedAt} />}
+        {analysis && (
+          <div
+            className="panel-pad"
+            style={{ borderTop: "1px solid #ececea", paddingTop: 14, paddingBottom: 14 }}
+          >
+            <ExportBar
+              image={analysis.image}
+              summary={{
+                fileName: analysis.fileName,
+                post: analysis.post,
+                provider: analysis.provider,
+                ms: analysis.ms,
+                capturedAt,
+                recipe: meta.recipe,
+              }}
+            />
+          </div>
+        )}
       </section>
 
       {analysis && (
@@ -187,13 +211,6 @@ export default function Analyzer() {
           {(analysis.post.multimodal || analysis.post.bimodal) && (
             <BimodalWarning post={analysis.post} />
           )}
-
-          <Panel
-            title="Timeline"
-            caption="The full posterior laid along time. Hover for the chance of having divided by any point."
-          >
-            <Timeline post={analysis.post} capturedAt={capturedAt} />
-          </Panel>
 
           <div
             style={{
@@ -204,7 +221,7 @@ export default function Analyzer() {
           >
             <Panel
               title="Posterior by bin"
-              caption={`All ${analysis.post.probs.length} bins the model outputs, unsmoothed.`}
+              caption={`All ${analysis.post.probs.length} bins the model outputs.`}
             >
               <PosteriorChart post={analysis.post} />
             </Panel>
@@ -218,7 +235,7 @@ export default function Analyzer() {
 
           <Panel
             title="Where the model looked"
-            caption="Which regions the prediction depends on at this stage, measured by blanking each patch and re-running the whole model."
+            caption="Which regions the prediction depends on at this stage."
           >
             {/* The pre-rendered gallery first: it is instant, finer-grained (the
                 model's own 16x16 patch grid), and answers "what does the model look at
@@ -254,7 +271,7 @@ export default function Analyzer() {
 
           <Panel
             title="What our corpus looks like at this time"
-            caption="Real embryos that were this far from dividing — so the number has something to be checked against."
+            caption="Real embryos that were this far from dividing."
           >
             <CorpusStrip post={analysis.post} />
           </Panel>
@@ -271,33 +288,13 @@ export default function Analyzer() {
             </Panel>
             <Panel
               title="Raw output"
-              caption="Every logit and probability, exportable — and the whole of what the model emits."
+              caption="Every logit and probability, exportable."
             >
               <RawData
                 post={analysis.post}
                 logits={analysis.logits}
                 fileName={analysis.fileName}
               />
-              {/* Said plainly because it is the obvious next question, and because a
-                  saliency overlay would be easy to fake and wrong to show: learned
-                  routing over this model's patch tokens was measured and LOST to the
-                  pooled feature by 0.26 h, so there is no evidence its spatial tokens
-                  localise anything about timing. */}
-              <p
-                style={{
-                  margin: "12px 0 0",
-                  fontSize: 11.5,
-                  fontWeight: 600,
-                  color: "var(--accent-soft)",
-                  lineHeight: 1.6,
-                }}
-              >
-                These 48 numbers are the model&rsquo;s entire output — it emits no mask,
-                no landmarks and no attention weights, because the backbone pools its
-                features across the whole frame before the head ever sees them. The map
-                above is therefore not read out of the model; it is <em>measured</em> by
-                blanking part of the image and asking the same model again.
-              </p>
             </Panel>
           </div>
 
@@ -318,16 +315,23 @@ export default function Analyzer() {
   );
 }
 
-function Headline({
+/** Exported so ExportReport can render the same headline off screen. */
+export function Headline({
   analysis,
   capturedAt,
+  image,
+  fileName,
 }: {
-  analysis: Analysis;
+  analysis: Pick<Analysis, "post" | "provider" | "ms">;
   capturedAt: Date | null;
+  image?: PreparedImage;
+  fileName?: string;
 }) {
   const { post } = analysis;
   return (
-    <div>
+    <div className="headline-row">
+      {image && <ImageThumb image={image} label={fileName} />}
+      <div style={{ minWidth: 0, flex: 1 }}>
       <div
         style={{
           display: "flex",
@@ -408,18 +412,7 @@ function Headline({
         </div>
       </div>
 
-      <p
-        style={{
-          margin: "12px 2px 0",
-          fontSize: 11.5,
-          fontWeight: 600,
-          color: "#a8a8a3",
-          lineHeight: 1.55,
-        }}
-      >
-        Read the interval, not just the headline number. The model is deliberately
-        allowed to be vague, and it is being vague for a reason when it is.
-      </p>
+      </div>
     </div>
   );
 }
@@ -561,17 +554,21 @@ function ModelUnavailableNotice() {
   );
 }
 
-function Panel({
+/** Exported so ExportReport can reuse the panel chrome. `animate` is off there: the
+ *  entrance animation would be mid-flight when the offscreen render is rasterised. */
+export function Panel({
   title,
   caption,
   children,
+  animate = true,
 }: {
   title: string;
   caption?: string;
   children: React.ReactNode;
+  animate?: boolean;
 }) {
   return (
-    <section className="panel rise">
+    <section className={animate ? "panel rise" : "panel"}>
       <div className="panel-pad">
         <div style={{ marginBottom: 14 }}>
           <h2 className="panel-heading" style={{ margin: 0 }}>

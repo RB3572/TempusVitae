@@ -117,9 +117,51 @@ body {
   padding: 28px;
 }
 
-@media (max-width: 560px) {
+@media (max-width: 640px) {
   .shell {
-    padding: 16px;
+    padding: 14px 13px 28px;
+  }
+  .page-header {
+    margin-bottom: 16px;
+  }
+  .page-sub {
+    font-size: 13px;
+  }
+}
+
+/* ---- Page header ------------------------------------------------------- */
+
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
+.page-sub {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
+  max-width: 54ch;
+  line-height: 1.55;
+}
+
+/* ---- Result headline --------------------------------------------------- */
+
+/* The uploaded frame sits beside the number it produced. It drops to its own row
+   only on the narrowest phones, where 92px of thumbnail would squeeze the readout. */
+.headline-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+@media (max-width: 380px) {
+  .headline-row {
+    gap: 12px;
   }
 }
 
@@ -137,9 +179,12 @@ body {
   padding: 20px 22px;
 }
 
-@media (max-width: 560px) {
+@media (max-width: 640px) {
   .panel-pad {
-    padding: 16px;
+    padding: 14px;
+  }
+  .panel {
+    border-radius: 14px;
   }
 }
 
@@ -186,9 +231,10 @@ h1.page-title {
   margin: 0;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   h1.page-title {
-    font-size: 25px;
+    font-size: 22px;
+    letter-spacing: -0.03em;
   }
 }
 
@@ -299,6 +345,81 @@ h1.page-title {
   outline: none;
   border-color: var(--ink);
   box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.07);
+}
+
+/* A two-way switch between the mouse and human models. One segment is the current
+   page (a span, not a link, so it cannot be "navigated" to itself); the other is a
+   real link to the sibling deployment. */
+.seg {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid #ddd;
+  border-radius: 999px;
+  background: #fff;
+  padding: 3px;
+  gap: 2px;
+}
+.seg > a,
+.seg > span {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--muted-strong);
+  text-decoration: none;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
+}
+.seg > a:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+.seg > .seg-on {
+  background: var(--ink);
+  color: #fff;
+}
+
+/* ---- Touch ------------------------------------------------------------- */
+
+/* Targets large enough for a thumb. Only on devices whose primary pointer is
+   coarse, so desktop keeps its tighter rhythm. 44px is the usual floor. */
+@media (pointer: coarse) {
+  .btn {
+    min-height: 44px;
+    padding: 11px 16px;
+  }
+  .seg > a,
+  .seg > span {
+    min-height: 38px;
+  }
+}
+
+/* iOS zooms the page when a focused field's font is under 16px. The datetime
+   input is the only one, and 16px there costs nothing. */
+@media (max-width: 600px) {
+  .input {
+    font-size: 16px;
+  }
+}
+
+/* Copy that differs by pointer type (the drop zone's "drop" vs "tap"). Pure CSS so
+   the server-rendered markup is identical on both and nothing hydrates differently. */
+.only-coarse { display: none; }
+@media (pointer: coarse) {
+  .only-fine { display: none; }
+  .only-coarse { display: inline; }
+}
+
+/* ---- Export clone -------------------------------------------------------- */
+
+/* The offscreen container the PNG / PDF export renders ExportReport into. Fixed
+   width, so every device produces the same report. Nothing in it may animate: the
+   rasteriser reads the DOM once, and a half-finished entrance would be baked in. */
+.export-root * {
+  animation: none !important;
+  transition: none !important;
 }
 
 /* ---- Status badges ----------------------------------------------------- */

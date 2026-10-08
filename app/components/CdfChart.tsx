@@ -1,22 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Posterior } from "../lib/decode";
 import { addHours, formatHours, probWithin } from "../lib/decode";
+import { useChartScale } from "../lib/useChartScale";
 
 /**
  * Cumulative view: P(has divided by time t). The practical question in a lab is
  * usually "will it have gone by the time I come back", which the density curve
  * only answers by eye. Reference lines at 25/50/75/90% turn it into a schedule.
+ *
+ * Sized by `k` (see useChartScale) so it stays readable on a phone; readout by
+ * pointer so a tap or horizontal drag scrubs it, with vertical scrolling left alone.
  */
 
 const W = 1000;
-const H = 210;
-const PAD_L = 40;
-const PAD_R = 12;
-const PAD_B = 30;
-const PAD_T = 12;
-
 const MARKS = [0.25, 0.5, 0.75, 0.9];
 
 export default function CdfChart({
@@ -26,7 +24,17 @@ export default function CdfChart({
   post: Posterior;
   capturedAt: Date | null;
 }) {
+  const wrap = useRef<HTMLDivElement>(null);
+  const k = useChartScale(wrap);
   const [hover, setHover] = useState<number | null>(null);
+
+  const H = 210 * k;
+  const PAD_L = 40 * k;
+  const PAD_R = 12 * k;
+  const PAD_B = 30 * k;
+  const PAD_T = 12 * k;
+  const fs = 9.5 * k;
+
   const rMin = post.edges[0];
   const rMax = post.edges[post.edges.length - 1];
   const plotW = W - PAD_L - PAD_R;
@@ -49,37 +57,36 @@ export default function CdfChart({
     return null;
   };
 
+  const pick = (e: React.PointerEvent<SVGSVGElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width) * W;
+    setHover(Math.min(Math.max(x, PAD_L), W - PAD_R));
+  };
+
   const hoverHours = hover === null ? null : hOf(hover);
   const hoverProb = hoverHours === null ? null : probWithin(post, hoverHours);
 
+  const tipW = 156 * k;
+  const tipX = hover === null ? 0 : Math.min(Math.max(hover - 78 * k, 2), W - tipW - 2);
+
   return (
-    <div>
+    <div ref={wrap}>
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="w-full"
-        style={{ display: "block", touchAction: "none" }}
-        onMouseMove={(e) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          const x = ((e.clientX - r.left) / r.width) * W;
-          setHover(Math.min(Math.max(x, PAD_L), W - PAD_R));
-        }}
-        onMouseLeave={() => setHover(null)}
+        style={{ display: "block", touchAction: "pan-y" }}
+        onPointerMove={pick}
+        onPointerDown={pick}
+        onPointerLeave={() => setHover(null)}
       >
         {[0, 0.25, 0.5, 0.75, 1].map((p) => (
           <g key={p}>
-            <line
-              x1={PAD_L}
-              y1={yOf(p)}
-              x2={W - PAD_R}
-              y2={yOf(p)}
-              stroke="#ececea"
-              strokeWidth="1"
-            />
+            <line x1={PAD_L} y1={yOf(p)} x2={W - PAD_R} y2={yOf(p)} stroke="#ececea" strokeWidth={k} />
             <text
-              x={PAD_L - 8}
-              y={yOf(p) + 3}
+              x={PAD_L - 8 * k}
+              y={yOf(p) + 3 * k}
               textAnchor="end"
-              fontSize="9.5"
+              fontSize={fs}
               fontWeight="600"
               fill="#a8a8a3"
             >
@@ -89,7 +96,7 @@ export default function CdfChart({
         ))}
 
         <path d={`${d} L${xOf(rMax)},${yOf(0)} Z`} fill="#111111" opacity="0.05" />
-        <path d={d} fill="none" stroke="#111111" strokeWidth="2" strokeLinejoin="round" />
+        <path d={d} fill="none" stroke="#111111" strokeWidth={2 * k} strokeLinejoin="round" />
 
         {MARKS.map((p) => {
           const t = timeFor(p);
@@ -102,41 +109,28 @@ export default function CdfChart({
                 x2={xOf(t)}
                 y2={yOf(0)}
                 stroke="#2f8f6b"
-                strokeWidth="1"
-                strokeDasharray="3 3"
+                strokeWidth={k}
+                strokeDasharray={`${3 * k} ${3 * k}`}
                 opacity="0.75"
               />
-              <circle cx={xOf(t)} cy={yOf(p)} r="3" fill="#2f8f6b" />
-              <text
-                x={xOf(t) + 5}
-                y={yOf(p) - 5}
-                fontSize="9.5"
-                fontWeight="700"
-                fill="#2f8f6b"
-              >
+              <circle cx={xOf(t)} cy={yOf(p)} r={3 * k} fill="#2f8f6b" />
+              <text x={xOf(t) + 5 * k} y={yOf(p) - 5 * k} fontSize={fs} fontWeight="700" fill="#2f8f6b">
                 {p * 100}% by {t.toFixed(1)}h
               </text>
             </g>
           );
         })}
 
-        <line
-          x1={PAD_L}
-          y1={yOf(0)}
-          x2={W - PAD_R}
-          y2={yOf(0)}
-          stroke="#dededb"
-          strokeWidth="1"
-        />
+        <line x1={PAD_L} y1={yOf(0)} x2={W - PAD_R} y2={yOf(0)} stroke="#dededb" strokeWidth={k} />
         {Array.from({ length: Math.floor(rMax - rMin) / 2 + 1 }, (_, i) => rMin + i * 2)
           .filter((t) => t <= rMax)
           .map((t) => (
             <text
               key={t}
               x={xOf(t)}
-              y={yOf(0) + 16}
+              y={yOf(0) + 16 * k}
               textAnchor="middle"
-              fontSize="9.5"
+              fontSize={fs}
               fontWeight="600"
               fill="#747474"
             >
@@ -145,9 +139,9 @@ export default function CdfChart({
           ))}
         <text
           x={PAD_L + plotW / 2}
-          y={H - 2}
+          y={H - 2 * k}
           textAnchor="middle"
-          fontSize="9.5"
+          fontSize={fs}
           fontWeight="700"
           letterSpacing="0.08em"
           fill="#a8a8a3"
@@ -163,35 +157,16 @@ export default function CdfChart({
               x2={hover}
               y2={yOf(0)}
               stroke="#111111"
-              strokeWidth="1"
-              strokeDasharray="2 3"
+              strokeWidth={k}
+              strokeDasharray={`${2 * k} ${3 * k}`}
               opacity="0.45"
             />
-            <circle cx={hover} cy={yOf(hoverProb)} r="4" fill="#111111" />
-            <rect
-              x={Math.min(Math.max(hover - 78, 2), W - 158)}
-              y={PAD_T}
-              width="156"
-              height="34"
-              rx="8"
-              fill="#111111"
-            />
-            <text
-              x={Math.min(Math.max(hover - 78, 2), W - 158) + 9}
-              y={PAD_T + 15}
-              fontSize="11"
-              fontWeight="700"
-              fill="#ffffff"
-            >
+            <circle cx={hover} cy={yOf(hoverProb)} r={4 * k} fill="#111111" />
+            <rect x={tipX} y={PAD_T} width={tipW} height={34 * k} rx={8 * k} fill="#111111" />
+            <text x={tipX + 9 * k} y={PAD_T + 15 * k} fontSize={11 * k} fontWeight="700" fill="#ffffff">
               {(hoverProb * 100).toFixed(0)}% by {formatHours(hoverHours)}
             </text>
-            <text
-              x={Math.min(Math.max(hover - 78, 2), W - 158) + 9}
-              y={PAD_T + 28}
-              fontSize="10"
-              fontWeight="600"
-              fill="#a8a8a3"
-            >
+            <text x={tipX + 9 * k} y={PAD_T + 28 * k} fontSize={10 * k} fontWeight="600" fill="#a8a8a3">
               {capturedAt
                 ? addHours(capturedAt, hoverHours).toLocaleString([], {
                     hour: "2-digit",

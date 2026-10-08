@@ -55,3 +55,6 @@ __pycache__/
 
 # macOS AppleDouble sidecars, from the corpus drive
 ._*
+
+# Split parts of the weights, staged for upload. Same reason as the .onnx itself.
+public/models/cleavage.onnx.part*

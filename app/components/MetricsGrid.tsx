@@ -79,13 +79,24 @@ export default function MetricsGrid({
       style={{
         display: "grid",
         gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-        gap: 1,
-        background: "#ececea",
+        // Cell borders rather than grid gaps over a tinted backdrop: the row of
+        // metrics rarely divides evenly into the column count, and a gap-drawn grid
+        // paints its backdrop through the leftover cells as a grey block.
+        background: "#fff",
         borderTop: "1px solid #ececea",
       }}
     >
       {items.map((it) => (
-        <div key={it.label} style={{ background: "#fff", padding: "14px 16px" }} title={it.hint}>
+        <div
+          key={it.label}
+          style={{
+            background: "#fff",
+            padding: "14px 16px",
+            borderRight: "1px solid #ececea",
+            borderBottom: "1px solid #ececea",
+          }}
+          title={it.hint}
+        >
           <div className="metric-label" style={{ marginBottom: 6 }}>
             {it.label}
           </div>

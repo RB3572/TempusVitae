@@ -104,18 +104,28 @@ export default function DropZone({
             marginBottom: 4,
           }}
         >
-          {disabled
-            ? "Upload unavailable"
-            : busy
-              ? "Analysing…"
-              : "Drop an embryo image"}
+          {disabled ? (
+            "Upload unavailable"
+          ) : busy ? (
+            "Analysing…"
+          ) : (
+            <>
+              <span className="only-fine">Drop an embryo image</span>
+              <span className="only-coarse">Tap to choose an embryo image</span>
+            </>
+          )}
         </div>
         <div style={{ fontSize: 12.5, fontWeight: 600, color: "#747474" }}>
-          {disabled
-            ? "the model could not be loaded, so there is nothing to run"
-            : busy
-              ? "Running the model in your browser"
-              : "or click to browse · TIFF, PNG, JPEG"}
+          {disabled ? (
+            "the model could not be loaded, so there is nothing to run"
+          ) : busy ? (
+            "Running the model in your browser"
+          ) : (
+            <>
+              <span className="only-fine">or click to browse · TIFF, PNG, JPEG</span>
+              <span className="only-coarse">photo library or camera · TIFF, PNG, JPEG</span>
+            </>
+          )}
         </div>
       </div>
 

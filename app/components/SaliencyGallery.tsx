@@ -180,7 +180,7 @@ export default function SaliencyGallery({ hours }: { hours: number }) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 96px), 1fr))",
           gap: 12,
         }}
       >
@@ -232,11 +232,9 @@ export default function SaliencyGallery({ hours }: { hours: number }) {
           color: "var(--accent-soft)", maxWidth: "84ch",
         }}
       >
-        <strong>This is not a map of your image.</strong> It is a held-out embryo from our
-        corpus at the stage the model just predicted for you, showing which regions that
-        prediction depends on in general. Measured by blanking each patch and re-running
-        the whole model, and checked against randomly ordered patches on frames the model
-        was never fitted to — it wins on {mf.winsInsertion} of them.
+        <strong>This is not a map of your image.</strong> It is a held-out corpus embryo
+        at the stage just predicted for you, measured by blanking each patch and
+        re-running the model. It beats randomly ordered patches on {mf.winsInsertion}.
       </p>
     </div>
   );

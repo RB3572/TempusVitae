@@ -47,6 +47,36 @@ Set `NEXT_PUBLIC_MODEL_URL` to that URL and rebuild; Next.js inlines it at build
 If the weights cannot be reached, the site disables uploads and reports the outage.
 It never substitutes a synthetic posterior for a model prediction.
 
+## Exporting a result
+
+Every result can be saved as **PNG** or **PDF** from the bar under the headline, and
+the raw 48 bins as **CSV** or **JSON** from the Raw output panel.
+
+The PNG and PDF are not screenshots. `app/lib/export.ts` renders a dedicated
+`ExportReport` -- headline, metrics, the three charts, the model input -- into an
+offscreen 1100 px container with React and rasterises it with `html-to-image`, so a
+phone produces the same report a desktop does. The charts' responsive scale factor is
+pinned to 1 through `ChartScaleContext` for that render; without the pin a phone would
+export its enlarged chart type into a desktop-width page. The PDF (`jspdf`) carries the
+numbers as typeset text above the raster and paginates the raster across A4 pages.
+`scripts/check_pdf_export.ts` exercises the PDF assembly without a browser, including a
+regression check that the page-margin masks never paint over the header.
+
+Two things worth knowing: the rasteriser needs a *painting* tab -- an export started
+and then backgrounded finishes when the tab is visible again, it does not fail -- and
+Safari's `<foreignObject>` handling can drop chart tick labels from the raster, though
+the PDF's typeset header is unaffected.
+
+## Mobile
+
+The charts are SVGs scaled to their column. `app/lib/useChartScale.ts` measures the
+column and returns k = 1000 / width (clamped to [1, 2.6]); each chart multiplies its
+type, padding and height by k, so labels keep the same physical size at any width and
+the chart grows taller as it narrows instead of flattening to a ribbon. Readout is by
+pointer, not hover, so a tap or horizontal drag scrubs a chart, and `touch-action:
+pan-y` leaves vertical scrolling to the page. Buttons are 44 px on coarse pointers and
+the one text input is 16 px on narrow screens so iOS does not zoom on focus.
+
 ## The model on the page
 
 | | |

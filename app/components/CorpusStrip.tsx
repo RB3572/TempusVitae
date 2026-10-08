@@ -163,7 +163,12 @@ export default function CorpusStrip({ post }: { post: Posterior }) {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: `repeat(auto-fit, minmax(96px, ${manifest.tile}px))`,
+                // The max track size is capped by a percentage as well as by the tile's
+                // native size. auto-fit derives its repetition count from the max when
+                // that max is definite, so a flat `${manifest.tile}px` max yielded a
+                // single 176px column on a phone -- one tile per row.
+                gridTemplateColumns:
+                  `repeat(auto-fit, minmax(84px, min(${manifest.tile}px, 30%)))`,
                 gap: 10,
               }}
             >
@@ -226,10 +231,9 @@ export default function CorpusStrip({ post }: { post: Posterior }) {
           maxWidth: "80ch",
         }}
       >
-        Hand-reviewed frames from {manifest.sessions} of our imaging sessions, each
-        labelled with how long that embryo actually had left. Chosen by the predicted
-        time alone — <strong>not</strong> matched to your image, and not retrieved by the
-        model, which outputs a distribution over time and nothing else.
+        Hand-reviewed frames from {manifest.sessions} imaging sessions, each labelled
+        with how long that embryo actually had left. Chosen by predicted time alone —
+        <strong>not</strong> matched to your image.
       </p>
     </div>
   );
