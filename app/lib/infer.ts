@@ -142,6 +142,15 @@ export interface InferenceResult {
  * and the caches, metas and ONNX sessions are keyed by species id so switching the
  * toggle cannot serve one model's bytes under the other's settings.
  */
+/** " (610 MB)" when the size is known from the meta, otherwise nothing. */
+function bytesLabel(sp: Species): string {
+  const b = metaBytes.get(sp.id);
+  return b ? ` (${Math.round(b / 1e6)} MB)` : "";
+}
+
+/** Filled in by loadMeta, so an error can name the size without re-fetching anything. */
+const metaBytes = new Map<SpeciesId, number>();
+
 function partUrls(sp: Species): string[] {
   return sp.modelParts > 1
     ? Array.from({ length: sp.modelParts }, (_, i) => `${sp.modelUrl}.part${i}`)
@@ -182,7 +191,15 @@ export function onModelProgress(fn: ProgressFn | null) {
  * needs an access key pair this project does not hold. The split is byte-exact and
  * order-dependent: part(i) is bytes [i*size, (i+1)*size). The parts are sized first, so
  * the progress readout counts against the true total instead of restarting at every part
- * boundary, and concatenated in order.
+ * boundary, and written into one buffer in order.
+ *
+ * ONE ALLOCATION, NOT TWO. This used to push every chunk into an array and then allocate
+ * a second buffer of the full size to concatenate into -- 1.2 GB resident for a 610 MB
+ * graph, before onnxruntime copies it again into the wasm heap. Desktops absorbed that;
+ * phones did not, and the symptom was the download dying with Safari's generic
+ * "Load failed" rather than anything that pointed at memory. The total is known up front
+ * from Content-Length, so the destination is allocated once and chunks are written
+ * straight into it. The array path survives only for a server that sends no length.
  */
 async function fetchModelBytes(sp: Species): Promise<ArrayBuffer> {
   const caches_ = typeof caches !== "undefined" ? caches : null;
@@ -198,25 +215,38 @@ async function fetchModelBytes(sp: Species): Promise<ArrayBuffer> {
 
   const urls = partUrls(sp);
   let total = 0;
-  if (urls.length > 1) {
-    const heads = await Promise.all(urls.map((u) => fetch(u, { method: "HEAD" })));
-    heads.forEach((h, i) => {
-      if (!h.ok) throw new Error(`model fetch failed: ${h.status} on part ${i}`);
-      total += Number(h.headers.get("content-length") || 0);
-    });
-  }
+  const heads = await Promise.all(urls.map((u) => fetch(u, { method: "HEAD" })));
+  heads.forEach((h, i) => {
+    if (!h.ok) throw new Error(`model fetch failed: ${h.status} on part ${i}`);
+    total += Number(h.headers.get("content-length") || 0);
+  });
 
+  // Known length: one buffer, written in place. Unknown: collect and join, which is the
+  // old behaviour and the only option without a size.
+  const dest = total > 0 ? new Uint8Array(new ArrayBuffer(total)) : null;
   const chunks: Uint8Array[] = [];
   let loaded = 0;
+
+  const take = (b: Uint8Array) => {
+    if (dest) {
+      if (loaded + b.byteLength > dest.byteLength) {
+        throw new Error(
+          "the model is larger than its declared length -- refusing a truncated graph",
+        );
+      }
+      dest.set(b, loaded);
+    } else {
+      chunks.push(b);
+    }
+    loaded += b.byteLength;
+  };
+
   for (const url of urls) {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`model fetch failed: ${res.status}`);
-    if (urls.length === 1) total = Number(res.headers.get("content-length") || 0);
     const reader = res.body?.getReader();
     if (!reader) {
-      const b = new Uint8Array(await res.arrayBuffer());
-      chunks.push(b);
-      loaded += b.byteLength;
+      take(new Uint8Array(await res.arrayBuffer()));
       progressFn?.({ loaded, total: total || loaded, cached: false, done: false });
       continue;
     }
@@ -224,34 +254,54 @@ async function fetchModelBytes(sp: Species): Promise<ArrayBuffer> {
       const { done, value } = await reader.read();
       if (done) break;
       if (value) {
-        chunks.push(value);
-        loaded += value.byteLength;
+        take(value);
         progressFn?.({ loaded, total, cached: false, done: false });
       }
     }
   }
 
-  const bytes = new Uint8Array(loaded);
-  let at = 0;
-  for (const c of chunks) {
-    bytes.set(c, at);
-    at += c.byteLength;
+  let bytes: Uint8Array<ArrayBuffer>;
+  if (dest) {
+    if (loaded !== dest.byteLength) {
+      throw new Error(
+        `the model download ended early (${loaded} of ${dest.byteLength} bytes)`,
+      );
+    }
+    bytes = dest as Uint8Array<ArrayBuffer>;
+  } else {
+    bytes = new Uint8Array(new ArrayBuffer(loaded));
+    let at = 0;
+    for (const c of chunks) {
+      bytes.set(c, at);
+      at += c.byteLength;
+    }
+    chunks.length = 0;
   }
   progressFn?.({ loaded, total: total || loaded, cached: false, done: true });
 
   if (caches_) {
     try {
-      const cache = await caches_.open(sp.cacheName);
-      // Stored under the base URL even when it arrived in parts: the parts are an
-      // upload detail, and the cache only needs to answer "these bytes, this model".
-      await cache.put(sp.modelUrl, new Response(bytes, {
-        headers: { "content-type": "application/octet-stream" },
-      }));
+      // Caching writes a THIRD copy of the graph. Ask first: on a device whose quota
+      // cannot hold it the write is going to throw anyway, and it is better not to
+      // spend the memory and time finding that out.
+      const est = await navigator.storage?.estimate?.().catch(() => null);
+      const room =
+        !est || est.quota == null
+          ? true
+          : est.quota - (est.usage ?? 0) > bytes.byteLength * 1.1;
+      if (room) {
+        const cache = await caches_.open(sp.cacheName);
+        // Stored under the base URL even when it arrived in parts: the parts are an
+        // upload detail, and the cache only needs to answer "these bytes, this model".
+        await cache.put(sp.modelUrl, new Response(bytes, {
+          headers: { "content-type": "application/octet-stream" },
+        }));
+      }
     } catch {
       // A full or unavailable cache is not a reason to fail the prediction.
     }
   }
-  return bytes.buffer;
+  return bytes.buffer as ArrayBuffer;
 }
 
 type Loaded = { session: InferenceSession; provider: string };
@@ -269,6 +319,7 @@ export function loadMeta(sp: Species): Promise<{ meta: ModelMeta; hasModel: bool
       if (!res.ok) return { meta: FALLBACK_META, hasModel: false };
       const raw = await res.json();
       const meta: ModelMeta = { ...FALLBACK_META, ...raw };
+      if (typeof raw?.bytes === "number") metaBytes.set(sp.id, raw.bytes);
       // A meta file with no weights beside it is a broken deploy, not a model.
       // A cached copy counts: the weights may be huge and already local.
       if (typeof caches !== "undefined") {
@@ -339,7 +390,21 @@ async function getSession(sp: Species) {
         : ["wasm"];
     // Created from BYTES, not from the URL: that is what lets the Cache API serve
     // repeat visits and what makes the download progress observable at all.
-    const bytes = await fetchModelBytes(sp);
+    let bytes: ArrayBuffer;
+    try {
+      bytes = await fetchModelBytes(sp);
+    } catch (e) {
+      // Safari reports a download that ran out of memory as a bare TypeError reading
+      // "Load failed", which tells the reader nothing and sends them looking at their
+      // connection. Say what was actually being attempted and how big it is.
+      throw new ModelUnavailableError(
+        `The ${sp.label.toLowerCase()} model could not be downloaded` +
+        `${bytesLabel(sp)}. On a phone or tablet this is usually the device refusing` +
+        ` a download this large rather than a problem with the network — the model` +
+        ` runs entirely in the browser, so it needs that much memory free.` +
+        ` Original error: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
     try {
       const session = await ort.InferenceSession.create(bytes, {
         executionProviders: providers,
@@ -347,14 +412,28 @@ async function getSession(sp: Species) {
       });
       return { session, provider: providers[0] };
     } catch {
-      const session = await ort.InferenceSession.create(bytes, {
-        executionProviders: ["wasm"],
-        graphOptimizationLevel: "all",
-      });
-      return { session, provider: "wasm" };
+      try {
+        const session = await ort.InferenceSession.create(bytes, {
+          executionProviders: ["wasm"],
+          graphOptimizationLevel: "all",
+        });
+        return { session, provider: "wasm" };
+      } catch (e) {
+        throw new ModelUnavailableError(
+          `The ${sp.label.toLowerCase()} model downloaded but could not be started` +
+          `${bytesLabel(sp)}. The graph has to be held in memory twice while it is` +
+          ` being prepared, which most phones cannot do. Original error:` +
+          ` ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
     }
   })();
   sessionPromises.set(sp.id, p);
+  // A REJECTED LOAD MUST NOT BE REMEMBERED. The promise is the cache, so a session that
+  // failed to build -- a dropped download, a device that could not hold the graph --
+  // would otherwise be handed to every later attempt, and the only way back would be a
+  // reload. Dropping it lets the next upload try again.
+  p.catch(() => sessionPromises.delete(sp.id));
   return p;
 }
 
