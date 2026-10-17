@@ -72,7 +72,12 @@ export interface Species {
   variants: Variant[];
 }
 
-const env = (k: string, fallback: string) => process.env[k] || fallback;
+// NO DYNAMIC LOOKUPS. Next replaces `process.env.NEXT_PUBLIC_X` at build time only for
+// STATIC member access; a helper doing `process.env[name]` compiles to a runtime lookup
+// against an object that carries only the names the compiler saw referenced statically.
+// A tidier `env("NEXT_PUBLIC_MODEL_URL_LITE", fallback)` therefore read undefined in the
+// browser and the site fell back to a same-origin path that does not exist, which
+// surfaced as "model fetch failed: 404". Every one of these must be spelled out in full.
 
 export const SPECIES: Record<SpeciesId, Species> = {
   mouse: {
@@ -91,7 +96,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
         label: "mouse",
         blurb: "ViT-L/14, eight views. The published model.",
         metaUrl: "/models/model_meta.json",
-        modelUrl: env("NEXT_PUBLIC_MODEL_URL", "/models/cleavage.onnx"),
+        modelUrl: process.env.NEXT_PUBLIC_MODEL_URL || "/models/cleavage.onnx",
         modelParts: Number(process.env.NEXT_PUBLIC_MODEL_PARTS ?? 1),
         cacheName: "tempusvitae-model-mouse-v1",
       },
@@ -103,7 +108,8 @@ export const SPECIES: Record<SpeciesId, Species> = {
         blurb: "ViT-B/14, one view. Smaller and less accurate; runs on a phone.",
         explainUrl: null,
         metaUrl: "/models/mouse_lite.meta.json",
-        modelUrl: env("NEXT_PUBLIC_MODEL_URL_LITE", "/models/cleavage_lite.onnx"),
+        modelUrl:
+          process.env.NEXT_PUBLIC_MODEL_URL_LITE || "/models/cleavage_lite.onnx",
         modelParts: Number(process.env.NEXT_PUBLIC_MODEL_PARTS_LITE ?? 1),
         cacheName: "tempusvitae-model-mouse-lite-v1",
       },
@@ -125,7 +131,8 @@ export const SPECIES: Record<SpeciesId, Species> = {
         label: "human",
         blurb: "ViT-L/14 with register tokens. The published model.",
         metaUrl: "/models/human.meta.json",
-        modelUrl: env("NEXT_PUBLIC_MODEL_URL_HUMAN", "/models/cleavage_human.onnx"),
+        modelUrl:
+          process.env.NEXT_PUBLIC_MODEL_URL_HUMAN || "/models/cleavage_human.onnx",
         modelParts: Number(process.env.NEXT_PUBLIC_MODEL_PARTS_HUMAN ?? 1),
         cacheName: "tempusvitae-model-human-v1",
       },
