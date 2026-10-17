@@ -159,14 +159,21 @@ export function resolveVariant(species: Species, want: VariantId): Variant {
  * have; the failure is not graceful, it is the tab being killed mid-download. So the
  * default is chosen for the device and the reader can override it either way.
  *
- * `deviceMemory` is the direct signal but Safari does not implement it, which is
- * exactly where the problem bites. There, a coarse primary pointer stands in for "phone
- * or tablet". It over-triggers on a large iPad that could manage the full model, and
- * that is the right way round: the override is one click, a killed tab is not.
+ * A COARSE POINTER DECIDES IT, not the reported memory. `deviceMemory` looks like the
+ * right signal and is not: the spec caps it at 8 for fingerprinting reasons, so a
+ * current phone reports 4 or 8 and an 8 would have been read here as "roomy" and handed
+ * it the full model. Safari does not implement it at all, which is exactly where the
+ * problem bites. Touch-primary is the honest proxy for "this is a phone or tablet", and
+ * `deviceMemory` is kept only as a second chance to catch a small-memory desktop.
+ *
+ * It over-triggers on a large tablet that could manage the full model. That is the right
+ * way round: the override is one click, a killed tab is not.
  */
 export function prefersLightweight(): boolean {
   if (typeof navigator === "undefined") return false;
+  if (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches) {
+    return true;
+  }
   const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
-  if (typeof mem === "number") return mem <= 4;
-  return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  return typeof mem === "number" && mem <= 4;
 }
