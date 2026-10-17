@@ -1,6 +1,6 @@
 import { decodePosterior } from "./decode";
 import { runInference, type ModelMeta } from "./infer";
-import type { Species } from "./species";
+import type { LoadableModel } from "./species";
 
 /**
  * Occlusion saliency, computed in the browser against the SAME graph that made the
@@ -110,7 +110,7 @@ export function abortAllSaliency() {
 export async function occlusionMap(
   tensor: Float32Array,
   meta: ModelMeta,
-  sp: Species,
+  sp: LoadableModel,
   onProgress?: (done: number, total: number) => void,
   controller?: AbortController,
   onPlan?: (plan: SaliencyPlan) => void,
@@ -132,7 +132,7 @@ export async function occlusionMap(
 async function measure(
   tensor: Float32Array,
   meta: ModelMeta,
-  sp: Species,
+  sp: LoadableModel,
   onProgress: ((done: number, total: number) => void) | undefined,
   onPlan: ((plan: SaliencyPlan) => void) | undefined,
   stopped: () => boolean,

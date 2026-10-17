@@ -1,0 +1,22 @@
+{
+  "rMin": 0.0,
+  "rMax": 18.0,
+  "nBins": 48,
+  "imageSize": 224,
+  "backbone": "vit_base_patch14_dinov2.lvd142m",
+  "recipe": "frozen DINOv2 ViT-B/14 + temporal SSL, 1 view, 3-seed head",
+  "readout": "mean",
+  "q": null,
+  "sigmaHours": 1.0,
+  "ttaViews": 1,
+  "viewsInGraph": true,
+  "outputIs": "log(mean posterior) -- softmax recovers the posterior exactly",
+  "unit": "hours; REBASED (measured per-embryo frame interval, plan 13.2-RELABEL)",
+  "precision": "fp16 (weights and activations)",
+  "bytes": 173235772,
+  "exportedAt": "2026-10-17T16:41:18Z",
+  "shrunkBy": "fuse-then-fp16",
+  "parityMaxBinDelta": 0.0011876821517944336,
+  "parityHoursDelta": 0.00936576261517974,
+  "accuracyWithheld": "No accuracy figure is published for this build. Its trunk saw the sealed sessions during self-supervised pretraining (HANDOFF.md rule 3), so every cross-validated number for it is optimistic by an unknown amount and none of them describe this artifact the way the ViT-L figures describe the full model."
+}

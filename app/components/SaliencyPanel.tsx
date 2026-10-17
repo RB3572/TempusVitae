@@ -11,7 +11,7 @@ import {
 } from "../lib/saliency";
 import type { ModelMeta } from "../lib/infer";
 import type { PreparedImage } from "../lib/preprocess";
-import type { Species } from "../lib/species";
+import type { LoadableModel } from "../lib/species";
 
 /**
  * The three-panel explanation: what the model saw, where it looked, and what is left
@@ -34,7 +34,7 @@ export default function SaliencyPanel({
 }: {
   image: PreparedImage;
   meta: ModelMeta;
-  species: Species;
+  species: LoadableModel;
   enabled: boolean;
 }) {
   const [result, setResult] = useState<SaliencyResult | null>(null);

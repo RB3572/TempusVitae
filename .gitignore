@@ -58,3 +58,6 @@ __pycache__/
 
 # Split parts of the weights, staged for upload. Same reason as the .onnx itself.
 public/models/cleavage.onnx.part*
+
+# wrangler local state, including a simulated copy of the R2 bucket
+.wrangler

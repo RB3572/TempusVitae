@@ -129,6 +129,15 @@ body {
   }
 }
 
+/* The species switch and the model-size switch. Side by side where there is room,
+   stacked on a phone, and right-aligned with the header's other edge. */
+.header-switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 /* ---- Page header ------------------------------------------------------- */
 
 .page-header {

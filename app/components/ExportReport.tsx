@@ -37,7 +37,12 @@ export default function ExportReport({
         <section className="panel">
           <div className="panel-pad">
             <Headline
-              analysis={{ post, provider: summary.provider, ms: summary.ms }}
+              analysis={{
+                post,
+                provider: summary.provider,
+                ms: summary.ms,
+                modelName: summary.modelName,
+              }}
               capturedAt={capturedAt}
               image={image}
               fileName={summary.fileName}

@@ -39,6 +39,8 @@ export interface ExportSummary {
   recipe?: string;
   /** Measured out-of-fold coverage of the drawn interval, where it is calibrated. */
   coverage?: number;
+  /** Which build produced this, since more than one can. */
+  modelName?: string;
 }
 
 /** The subset of HTMLCanvasElement the PDF builder needs. Lets it be tested without a DOM. */
@@ -217,7 +219,8 @@ export async function buildPdf(canvas: RasterLike, summary: ExportSummary): Prom
   doc.setTextColor(116, 116, 116);
   const metaLines = [
     `Image: ${summary.fileName}`,
-    `Inference: ${summary.provider} in the browser, ${Math.round(summary.ms)} ms` +
+    `Inference: ${summary.modelName ? summary.modelName + ' build, ' : ''}` +
+    `${summary.provider} in the browser, ${Math.round(summary.ms)} ms` +
       (summary.recipe ? `  ·  ${summary.recipe}` : ""),
     `Generated ${new Date().toLocaleString()}  ·  tempusvitae.rishib.com`,
   ];

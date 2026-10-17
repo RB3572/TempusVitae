@@ -17,7 +17,15 @@ import SaliencyPanel from "./SaliencyPanel";
 import { decodePosterior, formatHours, addHours, type Posterior } from "../lib/decode";
 import { prepareImage, type PreparedImage } from "../lib/preprocess";
 import { abortAllSaliency } from "../lib/saliency";
-import { SPECIES, isSpeciesId, type SpeciesId } from "../lib/species";
+import {
+  SPECIES,
+  isSpeciesId,
+  isVariantId,
+  prefersLightweight,
+  resolveVariant,
+  type SpeciesId,
+  type VariantId,
+} from "../lib/species";
 import {
   FALLBACK_META,
   loadMeta,
@@ -26,6 +34,9 @@ import {
   type InferenceSource,
   type ModelMeta,
 } from "../lib/infer";
+
+/** Remembers an explicit choice of model size, so the device guess applies only once. */
+const VARIANT_KEY = "tempusvitae.variant";
 
 interface Analysis {
   /** Monotonic per-analysis id. Used as SaliencyPanel's `key`, so a new result
@@ -39,6 +50,8 @@ interface Analysis {
   source: InferenceSource;
   ms: number;
   provider: string;
+  /** Which build produced this. Two mouse models ship, so the number must say. */
+  modelName: string;
 }
 
 export default function Analyzer() {
@@ -47,15 +60,22 @@ export default function Analyzer() {
   // ?species=human deep-links to the human model so the old separate deployment's
   // links can be redirected here, and switching rewrites that without a navigation.
   const [speciesId, setSpeciesId] = useState<SpeciesId>("mouse");
+  // Null until the device has been looked at, so the first paint matches the
+  // prerendered HTML and the choice is made once, in an effect, after mount.
+  const [variantId, setVariantId] = useState<VariantId | null>(null);
   const species = SPECIES[speciesId];
+  const variant = resolveVariant(species, variantId ?? "full");
+  // A variant may replace or withdraw the species' explanation assets.
+  const explainUrl =
+    variant.explainUrl !== undefined ? variant.explainUrl : species.explainUrl;
   // Meta is stored WITH the species it was loaded for, and read back only when the two
   // agree. That is what makes switching safe without a reset: until the new species'
   // meta lands, `current` is null, so the page falls back to neutral settings and an
   // unknown availability rather than briefly describing one model with the other's
   // bin count and readout.
   const [loaded, setLoaded] =
-    useState<{ sp: SpeciesId; meta: ModelMeta; hasModel: boolean } | null>(null);
-  const current = loaded && loaded.sp === speciesId ? loaded : null;
+    useState<{ key: string; meta: ModelMeta; hasModel: boolean } | null>(null);
+  const current = loaded && loaded.key === variant.key ? loaded : null;
   const meta = current?.meta ?? FALLBACK_META;
   const hasModel = current ? current.hasModel : null;
   const [busy, setBusy] = useState(false);
@@ -70,20 +90,52 @@ export default function Analyzer() {
     // is prerendered as, which is a hydration mismatch; correcting it in an effect is
     // the supported way round that, and it runs exactly once.
     const q = new URLSearchParams(window.location.search).get("species");
+    // A remembered choice beats the device guess; the guess beats nothing.
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(VARIANT_KEY);
+    } catch {
+      // Private browsing can refuse storage. The device guess still applies.
+    }
+    const picked: VariantId = isVariantId(stored)
+      ? stored
+      : prefersLightweight()
+        ? "lite"
+        : "full";
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setVariantId(picked);
     if (isSpeciesId(q)) setSpeciesId(q);
   }, []);
 
   useEffect(() => {
+    if (variantId === null) return; // device not inspected yet
     let live = true;
-    loadMeta(species).then((r) => {
-      // A switch while this was in flight must not apply the previous species' meta.
-      if (live) setLoaded({ sp: species.id, meta: r.meta, hasModel: r.hasModel });
+    loadMeta(variant).then((r) => {
+      // A switch while this was in flight must not apply the previous model's meta.
+      if (live) setLoaded({ key: variant.key, meta: r.meta, hasModel: r.hasModel });
     });
     return () => {
       live = false;
     };
-  }, [species]);
+  }, [variant, variantId]);
+
+  const switchVariant = useCallback(
+    (next: VariantId) => {
+      setVariantId((prev) => {
+        if (prev === next) return prev;
+        abortAllSaliency();
+        setAnalysis(null);
+        setError(null);
+        try {
+          localStorage.setItem(VARIANT_KEY, next);
+        } catch {
+          // Not being able to remember the choice does not stop it applying now.
+        }
+        return next;
+      });
+    },
+    [],
+  );
 
   const switchSpecies = useCallback(
     (next: SpeciesId) => {
@@ -119,7 +171,7 @@ export default function Analyzer() {
       setError(null);
       try {
         const image = await prepareImage(file, meta.imageSize);
-        const result = await runInference(image.tensor, meta, species);
+        const result = await runInference(image.tensor, meta, variant);
         // The published recipe collapses the posterior with a quantile fitted on
         // training folds, so that -- not the mean or the mode -- is the number every
         // reported MAE describes -- and every result reaching here is a real one.
@@ -138,6 +190,7 @@ export default function Analyzer() {
           source: result.source,
           ms: result.ms,
           provider: result.provider,
+          modelName: variant.name,
         });
       } catch (e) {
         // An unloadable model is an outage, not a problem with the user's file, and
@@ -155,13 +208,18 @@ export default function Analyzer() {
         setBusy(false);
       }
     },
-    [meta, species],
+    [meta, variant],
   );
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
-      <SpeciesHeader speciesId={speciesId} onSwitch={switchSpecies} />
-      {hasModel === false && <ModelUnavailableNotice species={species.label} />}
+      <SpeciesHeader
+        speciesId={speciesId}
+        onSwitch={switchSpecies}
+        variant={variant}
+        onSwitchVariant={switchVariant}
+      />
+      {hasModel === false && <ModelUnavailableNotice species={variant.label} />}
 
       <section className="panel">
         <div className={`panel-pad split-grid${analysis ? "" : " single"}`}>
@@ -257,6 +315,7 @@ export default function Analyzer() {
                 capturedAt,
                 recipe: meta.recipe,
                 coverage: meta.intervalCoverage,
+                modelName: analysis.modelName,
               }}
             />
           </div>
@@ -290,43 +349,45 @@ export default function Analyzer() {
             </Panel>
           </div>
 
-          <Panel
-            title="Where the model looked"
-            caption="Which regions the prediction depends on at this stage."
-          >
-            {/* The pre-rendered gallery first: it is instant, finer-grained (the
-                model's own 16x16 patch grid), and answers "what does the model look at
-                at this stage" without asking anyone to wait. The live measurement below
-                answers the different question -- "what did it look at in MY image" --
-                and costs a forward pass per patch, so it stays behind its button. */}
-            <SaliencyGallery
-              hours={
-                analysis.post.readoutQ === null
-                  ? analysis.post.mode
-                  : analysis.post.readout
-              }
-              manifestUrl={species.explainUrl}
-            />
-            <details style={{ marginTop: 16 }}>
-              <summary
-                style={{
-                  cursor: "pointer", fontSize: 12, fontWeight: 700,
-                  color: "var(--muted)",
-                }}
-              >
-                Measure it on my own image instead (slow)
-              </summary>
-              <div style={{ marginTop: 12 }}>
-                <SaliencyPanel
-                  key={analysis.id}
-                  image={analysis.image}
-                  meta={meta}
-                  species={species}
-                  enabled
-                />
-              </div>
-            </details>
-          </Panel>
+          {explainUrl && (
+            <Panel
+              title="Where the model looked"
+              caption="Which regions the prediction depends on at this stage."
+            >
+              {/* The pre-rendered gallery first: it is instant, finer-grained (the
+                  model's own 16x16 patch grid), and answers "what does the model look at
+                  at this stage" without asking anyone to wait. The live measurement below
+                  answers the different question -- "what did it look at in MY image" --
+                  and costs a forward pass per patch, so it stays behind its button. */}
+              <SaliencyGallery
+                hours={
+                  analysis.post.readoutQ === null
+                    ? analysis.post.mode
+                    : analysis.post.readout
+                }
+                manifestUrl={explainUrl}
+              />
+              <details style={{ marginTop: 16 }}>
+                <summary
+                  style={{
+                    cursor: "pointer", fontSize: 12, fontWeight: 700,
+                    color: "var(--muted)",
+                  }}
+                >
+                  Measure it on my own image instead (slow)
+                </summary>
+                <div style={{ marginTop: 12 }}>
+                  <SaliencyPanel
+                    key={analysis.id}
+                    image={analysis.image}
+                    meta={meta}
+                    species={variant}
+                    enabled
+                  />
+                </div>
+              </details>
+            </Panel>
+          )}
 
           {/* Omitted, not emptied, for a species whose corpus frames are not published
               with the site: a panel captioned "real embryos" with nothing under it reads
@@ -387,7 +448,7 @@ export function Headline({
   fileName,
   coverage,
 }: {
-  analysis: Pick<Analysis, "post" | "provider" | "ms">;
+  analysis: Pick<Analysis, "post" | "provider" | "ms"> & { modelName?: string };
   capturedAt: Date | null;
   image?: PreparedImage;
   fileName?: string;
@@ -411,7 +472,9 @@ export function Headline({
         <span className="eyebrow">Hours until first cleavage</span>
         {/* One branch, because there is only one kind of result now: a real one. */}
         <span className="badge badge-neutral">
-          <span className="badge-dot" /> {analysis.provider} · {Math.round(analysis.ms)} ms
+          <span className="badge-dot" />
+          {analysis.modelName ? `${analysis.modelName} · ` : ""}
+          {analysis.provider} · {Math.round(analysis.ms)} ms
         </span>
       </div>
 

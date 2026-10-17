@@ -29,7 +29,7 @@
 
 import type { InferenceSession, TypedTensor } from "onnxruntime-web";
 
-import type { Species, SpeciesId } from "./species";
+import type { LoadableModel } from "./species";
 
 export interface ModelMeta {
   /** Lower edge of the first bin, hours. */
@@ -143,15 +143,15 @@ export interface InferenceResult {
  * toggle cannot serve one model's bytes under the other's settings.
  */
 /** " (610 MB)" when the size is known from the meta, otherwise nothing. */
-function bytesLabel(sp: Species): string {
-  const b = metaBytes.get(sp.id);
+function bytesLabel(sp: LoadableModel): string {
+  const b = metaBytes.get(sp.key);
   return b ? ` (${Math.round(b / 1e6)} MB)` : "";
 }
 
 /** Filled in by loadMeta, so an error can name the size without re-fetching anything. */
-const metaBytes = new Map<SpeciesId, number>();
+const metaBytes = new Map<string, number>();
 
-function partUrls(sp: Species): string[] {
+function partUrls(sp: LoadableModel): string[] {
   return sp.modelParts > 1
     ? Array.from({ length: sp.modelParts }, (_, i) => `${sp.modelUrl}.part${i}`)
     : [sp.modelUrl];
@@ -201,7 +201,7 @@ export function onModelProgress(fn: ProgressFn | null) {
  * from Content-Length, so the destination is allocated once and chunks are written
  * straight into it. The array path survives only for a server that sends no length.
  */
-async function fetchModelBytes(sp: Species): Promise<ArrayBuffer> {
+async function fetchModelBytes(sp: LoadableModel): Promise<ArrayBuffer> {
   const caches_ = typeof caches !== "undefined" ? caches : null;
   if (caches_) {
     const cache = await caches_.open(sp.cacheName);
@@ -306,12 +306,12 @@ async function fetchModelBytes(sp: Species): Promise<ArrayBuffer> {
 
 type Loaded = { session: InferenceSession; provider: string };
 
-const metaPromises = new Map<SpeciesId, Promise<{ meta: ModelMeta; hasModel: boolean }>>();
-const sessionPromises = new Map<SpeciesId, Promise<Loaded | null>>();
+const metaPromises = new Map<string, Promise<{ meta: ModelMeta; hasModel: boolean }>>();
+const sessionPromises = new Map<string, Promise<Loaded | null>>();
 
 /** Does a published model exist, and what are its bin settings? */
-export function loadMeta(sp: Species): Promise<{ meta: ModelMeta; hasModel: boolean }> {
-  const cached = metaPromises.get(sp.id);
+export function loadMeta(sp: LoadableModel): Promise<{ meta: ModelMeta; hasModel: boolean }> {
+  const cached = metaPromises.get(sp.key);
   if (cached) return cached;
   const p = (async () => {
     try {
@@ -319,7 +319,7 @@ export function loadMeta(sp: Species): Promise<{ meta: ModelMeta; hasModel: bool
       if (!res.ok) return { meta: FALLBACK_META, hasModel: false };
       const raw = await res.json();
       const meta: ModelMeta = { ...FALLBACK_META, ...raw };
-      if (typeof raw?.bytes === "number") metaBytes.set(sp.id, raw.bytes);
+      if (typeof raw?.bytes === "number") metaBytes.set(sp.key, raw.bytes);
       // A meta file with no weights beside it is a broken deploy, not a model.
       // A cached copy counts: the weights may be huge and already local.
       if (typeof caches !== "undefined") {
@@ -367,12 +367,12 @@ export function loadMeta(sp: Species): Promise<{ meta: ModelMeta; hasModel: bool
       return { meta: FALLBACK_META, hasModel: false };
     }
   })();
-  metaPromises.set(sp.id, p);
+  metaPromises.set(sp.key, p);
   return p;
 }
 
-async function getSession(sp: Species) {
-  const cached = sessionPromises.get(sp.id);
+async function getSession(sp: LoadableModel) {
+  const cached = sessionPromises.get(sp.key);
   if (cached) return cached;
   const p = (async () => {
     const { hasModel } = await loadMeta(sp);
@@ -398,7 +398,7 @@ async function getSession(sp: Species) {
       // "Load failed", which tells the reader nothing and sends them looking at their
       // connection. Say what was actually being attempted and how big it is.
       throw new ModelUnavailableError(
-        `The ${sp.label.toLowerCase()} model could not be downloaded` +
+        `The ${sp.label} model could not be downloaded` +
         `${bytesLabel(sp)}. On a phone or tablet this is usually the device refusing` +
         ` a download this large rather than a problem with the network — the model` +
         ` runs entirely in the browser, so it needs that much memory free.` +
@@ -420,7 +420,7 @@ async function getSession(sp: Species) {
         return { session, provider: "wasm" };
       } catch (e) {
         throw new ModelUnavailableError(
-          `The ${sp.label.toLowerCase()} model downloaded but could not be started` +
+          `The ${sp.label} model downloaded but could not be started` +
           `${bytesLabel(sp)}. The graph has to be held in memory twice while it is` +
           ` being prepared, which most phones cannot do. Original error:` +
           ` ${e instanceof Error ? e.message : String(e)}`,
@@ -428,12 +428,12 @@ async function getSession(sp: Species) {
       }
     }
   })();
-  sessionPromises.set(sp.id, p);
+  sessionPromises.set(sp.key, p);
   // A REJECTED LOAD MUST NOT BE REMEMBERED. The promise is the cache, so a session that
   // failed to build -- a dropped download, a device that could not hold the graph --
   // would otherwise be handed to every later attempt, and the only way back would be a
   // reload. Dropping it lets the next upload try again.
-  p.catch(() => sessionPromises.delete(sp.id));
+  p.catch(() => sessionPromises.delete(sp.key));
   return p;
 }
 
@@ -442,7 +442,7 @@ async function getSession(sp: Species) {
  * the first run. In that case release its (large) GPU allocation before reading
  * the already-cached graph back and rebuilding with the portable WASM backend.
  */
-async function replaceWithWasmSession(sp: Species) {
+async function replaceWithWasmSession(sp: LoadableModel) {
   const ort = await import("onnxruntime-web");
   const bytes = await fetchModelBytes(sp);
   const session = await ort.InferenceSession.create(bytes, {
@@ -450,7 +450,7 @@ async function replaceWithWasmSession(sp: Species) {
     graphOptimizationLevel: "all",
   });
   const loaded = { session, provider: "wasm" };
-  sessionPromises.set(sp.id, Promise.resolve(loaded));
+  sessionPromises.set(sp.key, Promise.resolve(loaded));
   return loaded;
 }
 
@@ -475,7 +475,7 @@ let inferenceQueue: Promise<unknown> = Promise.resolve();
 export function runInference(
   tensor: Float32Array,
   meta: ModelMeta,
-  sp: Species,
+  sp: LoadableModel,
 ): Promise<InferenceResult> {
   const run = inferenceQueue.then(
     () => runInferenceUnqueued(tensor, meta, sp),
@@ -490,7 +490,7 @@ export function runInference(
 async function runInferenceUnqueued(
   tensor: Float32Array,
   meta: ModelMeta,
-  sp: Species,
+  sp: LoadableModel,
 ): Promise<InferenceResult> {
   const started = performance.now();
   const loaded = await getSession(sp);
